@@ -14,4 +14,7 @@ models = xmlrpc.client.ServerProxy('{}/xmlrpc/2/object'.format(url), allow_none=
 class DbConn:
     @staticmethod
     def get(*args):
-        return models.execute_kw(db, uid, password, *args)
+        try:
+            return models.execute_kw(db, uid, password, *args)
+        except:
+            return models.execute_kw(db, uid, password, *args)
