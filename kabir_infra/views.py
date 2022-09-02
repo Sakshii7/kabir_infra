@@ -69,8 +69,8 @@ def grn_list(request):
     grn_details = DbConn().get('syn.grn', 'search_read', [[['create_uid', '=', int(create_uid)]]],
                                {'fields': ['name', 'company_id', 'vendor_id', 'site_id', 'purchase_order_id']})
 
-    for i in grn_details:
-        i["grn_id"] = i.pop("id")
+    for grn_id in grn_details:
+        grn_id["grn_id"] = grn_id.pop("id")
     return Response({'result': grn_details, 'status_code': status.HTTP_200_OK})
 
 
@@ -81,8 +81,8 @@ def purchase_order_list(request):
     po_details = DbConn().get('syn.purchase.order', 'search_read', [[['create_uid', '=', int(create_uid)]]], {
         'fields': ['name', 'company_id', 'site_id', 'vendor_id', 'material_requisition_id', 'payment_terms_id',
                    'status']})
-    for i in po_details:
-        i["po_id"] = i.pop("id")
+    for po_id in po_details:
+        po_id["po_id"] = po_id.pop("id")
     return Response({'result': po_details, 'status_code': status.HTTP_200_OK})
 
 
@@ -94,11 +94,12 @@ def view_grn(request):
                                {'fields': ['name', 'company_id', 'vendor_id', 'site_id', 'purchase_order_id']})
     grn_line_details = DbConn().get('syn.grn.line', 'search_read', [[["grn_id", "=", int(grn_id)]]],
                                     {'fields': ['material_id', 'qty_received']})
-    for i in grn_details:
-        i["grn_id"] = i.pop("id")
-    for j in grn_line_details:
-        j["grn_line_id"] = j.pop("id")
-    grn_details.append(grn_line_details)
+    for grn_id in grn_details:
+        grn_id["grn_id"] = grn_id.pop("id")
+    for grn_line_id in grn_line_details:
+        grn_line_id["grn_line_id"] = grn_line_id.pop("id")
+    for res in grn_details:
+        res.update({'grn_line_details': grn_line_details})
     return Response(
         {'result': grn_details, 'status_code': status.HTTP_200_OK})
 
@@ -112,10 +113,11 @@ def view_purchase_order(request):
                    'status']})
     po_line_details = DbConn().get('syn.purchase.order.line', 'search_read', [[["purchase_order_id", "=", int(po_id)]]],
                                    {'fields': ['material_id', 'quantity']})
-    for i in po_details:
-        i["po_id"] = i.pop("id")
-    for j in po_line_details:
-        j["po_line_id"] = j.pop("id")
-    po_details.append(po_line_details)
+    for po_id in po_details:
+        po_id["po_id"] = po_id.pop("id")
+    for po_line_id in po_line_details:
+        po_line_id["po_line_id"] = po_line_id.pop("id")
+    for res in po_details:
+        res.update({'po_line_details': po_line_details})
     return Response(
         {'result': po_details, 'status_code': status.HTTP_200_OK})
