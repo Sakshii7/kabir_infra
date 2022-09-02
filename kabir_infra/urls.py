@@ -4,11 +4,15 @@ from . import views
 
 urlpatterns = [
     path('login', views.login, name='login'),
-    path('country_list', views.country_list, name='country_list'),
-    path('state_list', views.state_list, name='state_list'),
-    path('city_list', views.city_list, name='city_list'),
-    path('grn_list', views.grn_list, name='grn_list'),
-    path('purchase_order_list', views.purchase_order_list, name='purchase_order_list'),
-    path('view_grn', views.view_grn, name='view_grn'),
-    path('view_purchase_order', views.view_purchase_order, name='view_purchase_order'),
+    path('get_country_list', views.get_country_list, name='Get Country list'),
+    path('get_state_list', views.get_state_list, name='Get State list'),
+    path('get_city_list', views.get_city_list, name='Get City list'),
+    path('get_site_list', views.get_site_list, name='Get Site list'),
+    path('get_vendor_list', views.get_vendor_list, name='Get Vendor list'),
+    path('grn_list', views.grn_list, name='Get GRN list'),
+    path('get_pending_purchase_order_list', views.get_pending_purchase_order_list,
+         name='Get Pending Purchase Order list'),
+    path('view_grn', views.view_grn, name='GRN View'),
+    path('view_purchase_order', views.view_purchase_order, name='Purchase Order View'),
+    path('my_profile', views.my_profile, name='User Profile'),
 ]
