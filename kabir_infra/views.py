@@ -189,18 +189,33 @@ def add_material_requisition(request):
 
 @api_view(['POST'])
 @jwt_required()
-def purchase_order(request):
+def ref_purchase_order_list(request):
     site_id = request.data.get('site_id')
     vendor_id = request.data.get('vendor_id')
-    purchase_order_list = DbConn().get('syn.purchase.order', 'search_read',
-                                       [[['site_id', '=', int(site_id)], ['vendor_id', '=', int(vendor_id)]]],
-                                       {'fields': ['name', 'site_id', 'vendor_id']})
-    return Response(purchase_order_list)
+    purchase_order_details = DbConn().get('syn.purchase.order', 'search_read',
+                                          [[['site_id', '=', int(site_id)], ['vendor_id', '=', int(vendor_id)],
+                                            ['status', '=', 'approved']]],
+                                          {'fields': ['name', 'site_id', 'vendor_id']})
+    for purchase_order in purchase_order_details:
+        purchase_order_id = purchase_order["id"]
+        purchase_order_lines = DbConn().get('syn.purchase.order.line', 'search_read', [
+            [["purchase_order_id", "=", purchase_order_id]]], {'fields': ['quantity']})
+        material_quantity = purchase_order_lines[0]["quantity"]
+        ref_purchase_order_lines = DbConn().get('syn.purchase.order.line', 'search_read',
+                                               [[["purchase_order_id", "=", purchase_order_id],
+                                                 ["qty_received", "<", material_quantity]]],
+                                               {'fields': ['material_id', 'uom_id', 'quantity', 'qty_received']})
+        purchase_order['purchase_order_lines'] = ref_purchase_order_lines
+
+    return Response(
+        {'result': purchase_order_details, 'status_code': status.HTTP_200_OK},
+        status=status.HTTP_200_OK)
 
 # @api_view(['POST'])
 # @jwt_required()
 # def add_grn(request):
 #     vendor_id = request.data.get('vendor_id')
+#     site_id = request.data.get('site_id')
 #     purchase_order_id = request.data.get('purchase_order_id')
 #     vehicle_no = request.data.get('vehicle_no')
 #     document_no = request.data.get('document_no')
@@ -208,7 +223,6 @@ def purchase_order(request):
 #     material_data = eval(materials.replace('\\', ''))
 #     purchase_order = DbConn().get('syn.purchase.order', 'search_read', [[['vendor_id', '=', int(vendor_id)]]],
 #                                   {'fields': ['vendor_id', 'site_id', 'material_id']})
-#     site_id = purchase_order[0]['site_id'][0]
 #     grn_id = DbConn().get('syn.grn', 'create', [
 #         {'vendor_id': int(vendor_id), 'purchase_order_id': int(purchase_order_id), 'vehicle_no': vehicle_no,
 #          'document_no': document_no,  'site_id': site_id}])

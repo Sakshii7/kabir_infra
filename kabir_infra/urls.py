@@ -16,6 +16,6 @@ urlpatterns = [
     path('view_purchase_order', views.view_purchase_order, name='Purchase Order View'),
     path('my_profile', views.my_profile, name='User Profile'),
     path('add_material_requisition', views.add_material_requisition, name='Add Material Requisition'),
-    path('purchase_order', views.purchase_order, name='Purchase order List'),
+    path('ref_purchase_order_list', views.ref_purchase_order_list, name='Ref Purchase order List'),
     # path('add_grn', views.add_grn, name='Add GRN'),
 ]
