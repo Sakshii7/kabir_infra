@@ -187,57 +187,71 @@ def add_material_requisition(request):
                     status=status.HTTP_200_OK)
 
 
-@api_view(['POST'])
+@api_view(['GET'])
 @jwt_required()
 def ref_purchase_order_list(request):
+    site_id = request.query_params.get('site_id')
+    vendor_id = request.query_params.get('vendor_id')
+    purchase_order_list = DbConn().get('syn.purchase.order', 'search_read',
+                                       [[['site_id', '=', int(site_id)], ['vendor_id', '=', int(vendor_id)],
+                                         ['status', '=', 'approved']]],
+                                       {'fields': ['name', 'site_id', 'vendor_id']})
+    for purchase_order in purchase_order_list:
+
+        purchase_order_lines = DbConn.get('syn.purchase.order.line', 'search_read',
+                                          [[['purchase_order_id', '=', purchase_order.get('id')]]],
+                                          {'fields': ['material_id', 'uom_id', 'quantity', 'qty_received']})
+        purchase_order['purchase_order_id'] = purchase_order.pop('id')
+        filtered_po_lines = []
+        for po_line in purchase_order_lines:
+            if po_line['qty_received'] < po_line['quantity']:
+                filtered_po_lines.append(po_line)
+            po_line['po_line_id'] = po_line.pop('id')
+            print(po_line["material_id"])
+        purchase_order['po_lines'] = filtered_po_lines
+    return Response({'result': purchase_order_list}, status=status.HTTP_200_OK)
+
+    # for purchase_order in purchase_order_list:
+    #     purchase_order_id = purchase_order["id"]
+    #     purchase_order_lines = DbConn().get('syn.purchase.order.line', 'search_read', [
+    #         [["purchase_order_id", "=", purchase_order_id]]], {'fields': ['quantity']})
+    #     for lines in purchase_order_lines:
+    #         material_quantity = lines["quantity"]
+    #         # print(material_quantity)
+    #         ref_purchase_order_lines = DbConn().get('syn.purchase.order.line', 'search_read',
+    #                                                 [[["purchase_order_id", "=", purchase_order_id],
+    #                                                   ["qty_received", "<", 5]]],
+    #                                                 {'fields': ['material_id', 'uom_id', 'quantity', 'qty_received']})
+    #         return Response({'result': ref_purchase_order_lines,
+    #                          "line_id": lines.get('id'),
+    #                          'qty': material_quantity})
+    #         purchase_order['purchase_order_lines'] = ref_purchase_order_lines
+
+    # return Response(
+    #     {'result': purchase_order_list, 'status_code': status.HTTP_200_OK},
+    #     status=status.HTTP_200_OK)
+
+
+@api_view(['POST'])
+@jwt_required()
+def add_grn(request):
     site_id = request.data.get('site_id')
     vendor_id = request.data.get('vendor_id')
-    purchase_order_details = DbConn().get('syn.purchase.order', 'search_read',
-                                          [[['site_id', '=', int(site_id)], ['vendor_id', '=', int(vendor_id)],
-                                            ['status', '=', 'approved']]],
-                                          {'fields': ['name', 'site_id', 'vendor_id']})
-    for purchase_order in purchase_order_details:
-        purchase_order_id = purchase_order["id"]
-        purchase_order_lines = DbConn().get('syn.purchase.order.line', 'search_read', [
-            [["purchase_order_id", "=", purchase_order_id]]], {'fields': ['quantity']})
-        for lines in purchase_order_lines:
-            material_quantity = lines["quantity"]
-            # print(material_quantity)
-            ref_purchase_order_lines = DbConn().get('syn.purchase.order.line', 'search_read',
-                                                    [[["purchase_order_id", "=", purchase_order_id],
-                                                      ["qty_received", "<", material_quantity]]],
-                                                    {'fields': ['material_id', 'uom_id', 'quantity', 'qty_received']})
-            purchase_order['purchase_order_lines'] = ref_purchase_order_lines
-
-    return Response(
-        {'result': purchase_order_details, 'status_code': status.HTTP_200_OK},
-        status=status.HTTP_200_OK)
-
-
-# @api_view(['POST'])
-# @jwt_required()
-# def add_grn(request):
-#     site_id = request.data.get('site_id')
-#     vendor_id = request.data.get('vendor_id')
-#     purchase_order_id = request.data.get('purchase_order_id')
-#     vehicle_no = request.data.get('vehicle_no')
-#     document_no = request.data.get('document_no')
-#     materials = request.data.get('materials')
-#     purchase_order = DbConn().get('syn.purchase.order', 'search_read', [[['vendor_id', '=', int(vendor_id)]]],
-#                                   {'fields': ['vendor_id', 'site_id', 'material_id']})
-#     grn_id = DbConn().get('syn.grn', 'create', [
-#         {'site_id': int(site_id), 'vendor_id': int(vendor_id), 'purchase_order_id': int(purchase_order_id),
-#          'vehicle_no': vehicle_no, 'document_no': document_no}])
-#     grn_details = DbConn().get('syn.grn', 'read', [[grn_id]],
-#                                {'fields': ['site_id', 'vendor_id', 'purchase_order_id', 'vehicle_no']})
-#     material_data = eval(materials.replace('\\', ''))
-#     for mat in material_data:
-#         mat['grn_id'] = grn_id
-#         DbConn().get('syn.grn.line', 'create', [mat])
-#     for grn in grn_details:
-#         grn["grn_id"] = grn.pop("id")
-#         grn['grn_lines'] = material_data
-#     return Response({'result': grn_details, 'status_code': status.HTTP_200_OK},
-#                     status=status.HTTP_200_OK)
-
-
+    ref_purchase_order_id = request.data.get('ref_purchase_order_id')
+    vehicle_no = request.data.get('vehicle_no')
+    document_no = request.data.get('document_no')
+    materials = request.data.get('materials')
+    grn_id = DbConn().get('syn.grn', 'create', [
+        {'site_id': int(site_id), 'vendor_id': int(vendor_id), 'purchase_order_id': int(ref_purchase_order_id),
+         'vehicle_no': vehicle_no, 'document_no': document_no}])
+    grn_details = DbConn().get('syn.grn', 'read', [[grn_id]],
+                               {'fields': ['site_id', 'vendor_id', 'purchase_order_id', 'vehicle_no']})
+    material_data = eval(materials.replace('\\', ''))
+    for mat in material_data:
+        mat['grn_id'] = grn_id
+        DbConn().get('syn.grn.line', 'create', [mat])
+    for grn in grn_details:
+        grn["grn_id"] = grn.pop("id")
+        grn['grn_lines'] = material_data
+    return Response({'result': grn_details, 'status_code': status.HTTP_200_OK},
+                    status=status.HTTP_200_OK)
