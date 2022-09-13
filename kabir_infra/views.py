@@ -114,34 +114,6 @@ def get_grn_list(request):
 
 @api_view(['GET'])
 @jwt_required()
-def get_pending_purchase_order_list(request):
-    site_id = request.query_params.get('site_id')
-    identity = get_jwt_identity(request)
-    user_id = identity["user_details"][0]["user_id"]
-    date_from = request.query_params.get('date_from')
-    date_to = request.query_params.get('date_to')
-    domain = [['create_uid', '=', user_id], ['status', '=', 'approved'],
-              ['site_id', '=', int(site_id)]]
-    if date_from and not date_to:
-        domain.append(['order_date', '>=', date_from])
-    elif date_to and not date_from:
-        domain.append(['order_date', '<=', date_to])
-    elif date_from and date_to:
-        domain.append(['order_date', '>=', date_from])
-        domain.append(['order_date', '<=', date_to])
-    else:
-        domain
-    purchase_order_details = DbConn().get(Models.purchase_order, 'search_read', [domain],
-                                          {'fields': ['name', 'company_id', 'site_id', 'vendor_id', 'order_date',
-                                                      'status']})
-    for purchase_order in purchase_order_details:
-        purchase_order["purchase_order_id"] = purchase_order.pop("id")
-    return Response({'result': purchase_order_details, 'status_code': status.HTTP_200_OK},
-                    status=status.HTTP_200_OK)
-
-
-@api_view(['GET'])
-@jwt_required()
 def view_grn(request):
     grn_id = request.query_params.get("grn_id")
     grn_details = DbConn().get(Models.grn, 'read', [[int(grn_id)]],
@@ -157,53 +129,6 @@ def view_grn(request):
         grn['status'] = str(grn["status"]).capitalize()
     return Response(
         {'result': grn_details, 'status_code': status.HTTP_200_OK}, status=status.HTTP_200_OK)
-
-
-@api_view(['GET'])
-@jwt_required()
-def view_purchase_order(request):
-    purchase_order_id = request.query_params.get("purchase_order_id")
-    purchase_order_details = DbConn().get(Models.purchase_order, 'read',
-                                          [[int(purchase_order_id)]], {
-                                              'fields': ['name', 'company_id', 'site_id', 'vendor_id',
-                                                         'material_requisition_id', 'status']})
-    purchase_order_lines = DbConn().get(Models.purchase_order_line, 'search_read',
-                                        [[["purchase_order_id", "=", int(purchase_order_id)]]],
-                                        {'fields': ['material_id', 'quantity', 'qty_received', 'uom_id']})
-    for line in purchase_order_lines:
-        line["purchase_order_line_id"] = line.pop("id")
-        material_id = line["material_id"][0]
-        materials = DbConn().get('syn.material', 'read', [[material_id]], {'fields': ['allowable_tolerance']})
-        allowable_tolerance = materials[0]['allowable_tolerance']
-        calculation = line["quantity"] * allowable_tolerance / 100 + line["quantity"] - line["qty_received"]
-        line["balance_qty"] = round(calculation)
-
-    for purchase_order in purchase_order_details:
-        purchase_order["purchase_order_id"] = purchase_order.pop("id")
-        purchase_order['status'] = str(purchase_order["status"]).capitalize()
-        purchase_order['purchase_order_lines'] = purchase_order_lines
-    return Response(
-        {'result': purchase_order_details, 'status_code': status.HTTP_200_OK}, status=status.HTTP_200_OK)
-
-
-@api_view(['POST'])
-@jwt_required()
-def add_material_requisition(request):
-    site_id = request.data.get('site_id')
-    materials = request.data.get('materials')
-    material_data = eval(materials.replace('\\', ''))
-    material_requisition_id = DbConn().get(Models.material_requisition, 'create', [{'site_id': int(site_id)}])
-    for mat in material_data:
-        mat['material_requisition_id'] = material_requisition_id
-        DbConn().get(Models.material_requisition_line, 'create', [mat])
-    material_requisition_details = DbConn().get(Models.material_requisition, 'read', [[material_requisition_id]],
-                                                {'fields': ['name', 'site_id', 'requisition_date']})
-
-    for material_requisition in material_requisition_details:
-        material_requisition["material_requisition_id"] = material_requisition.pop("id")
-        material_requisition['material_requisition_lines'] = material_data
-    return Response({'result': material_requisition_details, 'status_code': status.HTTP_200_OK},
-                    status=status.HTTP_200_OK)
 
 
 @api_view(['GET'])
@@ -234,7 +159,7 @@ def ref_purchase_order_list(request):
 def add_grn(request):
     site_id = request.data.get('site_id')
     vendor_id = request.data.get('vendor_id')
-    purchase_order_id = request.data.get('ref_purchase_order_id')
+    purchase_order_id = request.data.get('purchase_order_id')
     vehicle_no = request.data.get('vehicle_no')
     document_no = request.data.get('document_no')
     po_line_id = request.data.get('po_line_id')
@@ -260,6 +185,61 @@ def add_grn(request):
     for line in grn_lines:
         line['grn_line_id'] = line.pop("id")
     return Response({'result': grn_details, 'status_code': status.HTTP_200_OK}, status=status.HTTP_200_OK)
+
+
+@api_view(['GET'])
+@jwt_required()
+def get_pending_purchase_order_list(request):
+    site_id = request.query_params.get('site_id')
+    identity = get_jwt_identity(request)
+    user_id = identity["user_details"][0]["user_id"]
+    date_from = request.query_params.get('date_from')
+    date_to = request.query_params.get('date_to')
+    domain = [['create_uid', '=', user_id], ['status', '=', 'approved'],
+              ['site_id', '=', int(site_id)]]
+    if date_from and not date_to:
+        domain.append(['order_date', '>=', date_from])
+    elif date_to and not date_from:
+        domain.append(['order_date', '<=', date_to])
+    elif date_from and date_to:
+        domain.append(['order_date', '>=', date_from])
+        domain.append(['order_date', '<=', date_to])
+    else:
+        domain
+    purchase_order_details = DbConn().get(Models.purchase_order, 'search_read', [domain],
+                                          {'fields': ['name', 'company_id', 'site_id', 'vendor_id', 'order_date',
+                                                      'status']})
+    for purchase_order in purchase_order_details:
+        purchase_order["purchase_order_id"] = purchase_order.pop("id")
+    return Response({'result': purchase_order_details, 'status_code': status.HTTP_200_OK},
+                    status=status.HTTP_200_OK)
+
+
+@api_view(['GET'])
+@jwt_required()
+def view_purchase_order(request):
+    purchase_order_id = request.query_params.get("purchase_order_id")
+    purchase_order_details = DbConn().get(Models.purchase_order, 'read',
+                                          [[int(purchase_order_id)]], {
+                                              'fields': ['name', 'company_id', 'site_id', 'vendor_id',
+                                                         'material_requisition_id', 'status']})
+    purchase_order_lines = DbConn().get(Models.purchase_order_line, 'search_read',
+                                        [[["purchase_order_id", "=", int(purchase_order_id)]]],
+                                        {'fields': ['material_id', 'quantity', 'qty_received', 'uom_id']})
+    for line in purchase_order_lines:
+        line["purchase_order_line_id"] = line.pop("id")
+        material_id = line["material_id"][0]
+        materials = DbConn().get('syn.material', 'read', [[material_id]], {'fields': ['allowable_tolerance']})
+        allowable_tolerance = materials[0]['allowable_tolerance']
+        calculation = line["quantity"] * allowable_tolerance / 100 + line["quantity"] - line["qty_received"]
+        line["balance_qty"] = round(calculation)
+
+    for purchase_order in purchase_order_details:
+        purchase_order["purchase_order_id"] = purchase_order.pop("id")
+        purchase_order['status'] = str(purchase_order["status"]).capitalize()
+        purchase_order['purchase_order_lines'] = purchase_order_lines
+    return Response(
+        {'result': purchase_order_details, 'status_code': status.HTTP_200_OK}, status=status.HTTP_200_OK)
 
 
 @api_view(['GET'])
@@ -323,6 +303,26 @@ def view_material_requisition(request):
                     status=status.HTTP_200_OK)
 
 
+@api_view(['POST'])
+@jwt_required()
+def add_material_requisition(request):
+    site_id = request.data.get('site_id')
+    materials = request.data.get('materials')
+    material_data = eval(materials.replace('\\', ''))
+    material_requisition_id = DbConn().get(Models.material_requisition, 'create', [{'site_id': int(site_id)}])
+    for mat in material_data:
+        mat['material_requisition_id'] = material_requisition_id
+        DbConn().get(Models.material_requisition_line, 'create', [mat])
+    material_requisition_details = DbConn().get(Models.material_requisition, 'read', [[material_requisition_id]],
+                                                {'fields': ['name', 'site_id', 'requisition_date']})
+
+    for material_requisition in material_requisition_details:
+        material_requisition["material_requisition_id"] = material_requisition.pop("id")
+        material_requisition['material_requisition_lines'] = material_data
+    return Response({'result': material_requisition_details, 'status_code': status.HTTP_200_OK},
+                    status=status.HTTP_200_OK)
+
+
 @api_view(['GET'])
 @jwt_required()
 def get_company_list(request):
@@ -337,8 +337,9 @@ def management_dashboard(request):
     company_id = request.query_params.get('company_id')
     active_sites = DbConn().get(Models.site, 'search_read',
                                 [[['company_id', '=', int(company_id)], ['status', '=', 'inprogress']]],
-                                {'fields': ['name']})
+                                {'fields': ['name', 'shape_paths', 'shape_type']})
     total_outstanding = 0.0
+    no_of_sites = len(active_sites)
     for site in active_sites:
         site_id = site["id"]
         due_amount = 0.0
@@ -352,5 +353,6 @@ def management_dashboard(request):
         site['due_amount'] = due_amount
         total_outstanding += due_amount
         site["site_id"] = site.pop("id")
-    return Response({'result': active_sites, 'total_outstanding': total_outstanding, 'status_code': status.HTTP_200_OK},
-                    status=status.HTTP_200_OK)
+    return Response(
+        {'result': {'sites': active_sites, 'total_outstanding': total_outstanding, 'no_of_sites': no_of_sites},
+         'status_code': status.HTTP_200_OK}, status=status.HTTP_200_OK)
