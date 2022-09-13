@@ -151,7 +151,7 @@ def ref_purchase_order_list(request):
                 filtered_po_lines.append(po_line)
             po_line['po_line_id'] = po_line.pop('id')
         purchase_order['po_lines'] = filtered_po_lines
-    return Response({'result': purchase_order_list}, status=status.HTTP_200_OK)
+    return Response({'result': purchase_order_list, 'status_code': status.HTTP_200_OK}, status=status.HTTP_200_OK)
 
 
 @api_view(['POST'])
