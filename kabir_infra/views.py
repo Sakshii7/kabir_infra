@@ -307,9 +307,12 @@ def view_material_requisition(request):
 @jwt_required()
 def add_material_requisition(request):
     site_id = request.data.get('site_id')
+    identity = get_jwt_identity(request)
+    user_id = identity["user_details"][0]["user_id"]
     materials = request.data.get('materials')
     material_data = eval(materials.replace('\\', ''))
-    material_requisition_id = DbConn().get(Models.material_requisition, 'create', [{'site_id': int(site_id)}])
+    material_requisition_id = DbConn().get(Models.material_requisition, 'create',
+                                           [{'site_id': int(site_id), 'user_id': user_id}])
     for mat in material_data:
         mat['material_requisition_id'] = material_requisition_id
         DbConn().get(Models.material_requisition_line, 'create', [mat])
@@ -327,7 +330,7 @@ def add_material_requisition(request):
 @jwt_required()
 def get_company_list(request):
     companies = DbConn().get(Models.company, 'search_read', [[]],
-                             {'fields': ['id', 'name', 'partner_id', 'mobile', 'email']})
+                             {'fields': ['id', 'name']})
     return Response({'result': companies, 'status_code': status.HTTP_200_OK}, status=status.HTTP_200_OK)
 
 
