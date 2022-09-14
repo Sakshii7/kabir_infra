@@ -357,5 +357,5 @@ def management_dashboard(request):
         total_outstanding += due_amount
         site["site_id"] = site.pop("id")
     return Response(
-        {'result': {'sites': active_sites, 'total_outstanding': total_outstanding, 'no_of_sites': no_of_sites},
+        {'result': {'sites': active_sites, 'total_outstanding': total_outstanding, 'no_of_active_sites': no_of_sites},
          'status_code': status.HTTP_200_OK}, status=status.HTTP_200_OK)
