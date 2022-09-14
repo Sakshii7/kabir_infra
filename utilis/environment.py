@@ -5,8 +5,6 @@ from dotenv import load_dotenv
 
 
 class Environment:
-    def __int__(self):
-        pass
 
     @staticmethod
     def get(key=''):
