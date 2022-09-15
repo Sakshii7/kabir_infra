@@ -18,28 +18,27 @@ def login(request):
     username = request.data.get('username')
     password = request.data.get('password')
     try:
+
         user_id = common.authenticate(db, username, password, {})
         user_details = DbConn().get(Models.user, 'read', [[int(user_id)]],
                                     {'fields': ['name', 'partner_id', 'login']})
+        app_role = get_app_role(user_id)
         for user in user_details:
             user["user_id"] = user.pop("id")
             user["email"] = user.pop("login")
-
+            user["app_role"] = app_role
         return Response(
             {'result': user_details,
              'tokens': {
-                "access_token": create_access_token(identity={'user_details': user_details, 'username': username}),
-                'refresh_token': create_refresh_token(identity={'user_details': user_details, 'username': username})},
+                 "access_token": create_access_token(identity={'user_details': user_details, 'username': username}),
+                 'refresh_token': create_refresh_token(identity={'user_details': user_details, 'username': username})},
              'status_code': status.HTTP_200_OK})
-
     except Exception:
         return Response({"result": "Invalid Username or Password", "status_code": status.HTTP_400_BAD_REQUEST},
                         status=status.HTTP_400_BAD_REQUEST)
 
 
-@api_view(['GET'])
-def get_app_role(request):
-    user_id = request.query_params.get("user_id")
+def get_app_role(user_id):
     category_id = DbConn().get(Models.groups, 'search', [[['category_id', "like", 'Construction Site Management']]])
     app_role = ''
     if category_id:
@@ -53,7 +52,7 @@ def get_app_role(request):
             app_role = "supervisior"
         else:
             app_role
-    return Response(app_role)
+    return app_role
 
 
 @api_view(['GET'])
@@ -388,6 +387,3 @@ def management_dashboard(request):
     return Response(
         {'result': {'no_of_active_sites': no_of_sites, 'total_outstanding': total_outstanding, 'sites': active_sites},
          'status_code': status.HTTP_200_OK}, status=status.HTTP_200_OK)
-
-
-
