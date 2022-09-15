@@ -26,7 +26,8 @@ def login(request):
             user["email"] = user.pop("login")
 
         return Response(
-            {'result': user_details, 'tokens': {
+            {'result': user_details,
+             'tokens': {
                 "access_token": create_access_token(identity={'user_details': user_details, 'username': username}),
                 'refresh_token': create_refresh_token(identity={'user_details': user_details, 'username': username})},
              'status_code': status.HTTP_200_OK})
@@ -34,6 +35,25 @@ def login(request):
     except Exception:
         return Response({"result": "Invalid Username or Password", "status_code": status.HTTP_400_BAD_REQUEST},
                         status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['GET'])
+def get_app_role(request):
+    user_id = request.query_params.get("user_id")
+    category_id = DbConn().get(Models.groups, 'search', [[['category_id', "like", 'Construction Site Management']]])
+    app_role = ''
+    if category_id:
+        get_admin_group_id = DbConn().get(Models.groups, 'search_read', [[['name', 'like', 'Administrator']]],
+                                          {'fields': ['users']})
+        get_supervisior_group_id = DbConn().get(Models.groups, 'search_read', [[['name', 'like', 'Site Supervisor']]],
+                                                {'fields': ['users']})
+        if int(user_id) in get_admin_group_id[0].get("users"):
+            app_role = "admin"
+        elif int(user_id) in get_supervisior_group_id[0].get("users"):
+            app_role = "supervisior"
+        else:
+            app_role
+    return Response(app_role)
 
 
 @api_view(['GET'])
@@ -95,7 +115,12 @@ def get_grn_list(request):
     user_id = identity["user_details"][0]["user_id"]
     date_from = request.query_params.get("date_from")
     date_to = request.query_params.get("date_to")
-    search_domain = [['create_uid', '=', int(user_id)], ['site_id', '=', int(site_id)]]
+    app_role = request.query_params.get("app_role")
+    search_domain = [['site_id', '=', int(site_id)]]
+    if app_role == 'admin':
+        search_domain
+    else:
+        search_domain.append(['create_uid', '=', int(user_id)])
     if date_from and not date_to:
         search_domain.append(['grn_date', '>=', date_from])
     elif date_to and not date_from:
@@ -250,7 +275,12 @@ def get_material_requisition_list(request):
     user_id = identity["user_details"][0]["user_id"]
     date_from = request.query_params.get('date_from')
     date_to = request.query_params.get('date_to')
-    domain = [['site_id', '=', int(site_id)], ['user_id', '=', int(user_id)]]
+    app_role = request.query_params.get('app_role')
+    domain = [['site_id', '=', int(site_id)]]
+    if app_role == "admin":
+        domain
+    else:
+        domain.append(['user_id', '=', int(user_id)])
     if date_from and not date_to:
         domain.append(['requisition_date', '>=', date_from])
     elif date_to and not date_from:
@@ -280,9 +310,9 @@ def view_material_requisition(request):
                                        [[['material_requisition_id', '=', int(material_requisition_id)]]],
                                        {'fields': ['name']})
 
-    for mat in material_requisition_lines:
-        mat['line_id'] = mat.pop("id")
-        material_id = mat["material_id"][0]
+    for line in material_requisition_lines:
+        line['line_id'] = line.pop("id")
+        material_id = line["material_id"][0]
         po_list = []
         for po in purchase_order_list:
             po_id = po["id"]
@@ -292,7 +322,7 @@ def view_material_requisition(request):
                                                 {'fields': ['material_id', 'purchase_order_id']})
             if purchase_order_lines:
                 po_list.append(po)
-        mat['po_list'] = po_list
+        line['po_list'] = po_list
     for purchase_order in purchase_order_list:
         purchase_order['purchase_order_id'] = purchase_order.pop("id")
     for material_requisition in material_requisition_details:
@@ -329,8 +359,7 @@ def add_material_requisition(request):
 @api_view(['GET'])
 @jwt_required()
 def get_company_list(request):
-    companies = DbConn().get(Models.company, 'search_read', [[]],
-                             {'fields': ['id', 'name']})
+    companies = DbConn().get(Models.company, 'search_read', [[]], {'fields': ['id', 'name']})
     return Response({'result': companies, 'status_code': status.HTTP_200_OK}, status=status.HTTP_200_OK)
 
 
@@ -357,5 +386,8 @@ def management_dashboard(request):
         total_outstanding += due_amount
         site["site_id"] = site.pop("id")
     return Response(
-        {'result': {'sites': active_sites, 'total_outstanding': total_outstanding, 'no_of_active_sites': no_of_sites},
+        {'result': {'no_of_active_sites': no_of_sites, 'total_outstanding': total_outstanding, 'sites': active_sites},
          'status_code': status.HTTP_200_OK}, status=status.HTTP_200_OK)
+
+
+

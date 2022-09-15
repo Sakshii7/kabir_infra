@@ -12,3 +12,5 @@ class Models:
     purchase_order_line = 'syn.purchase.order.line'
     material_requisition = 'syn.material.requisition'
     material_requisition_line = 'syn.material.requisition.line'
+    groups = 'res.groups'
+    model_access = 'ir.model.access'
