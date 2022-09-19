@@ -6,7 +6,7 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
 from kabir_infra_app.db_conn import DbConn
-from utilis import Environment, Models
+from utilis import Environment, Models, DateFormat, TimeFormat
 
 url = Environment.get("HOST_URL")
 db = Environment.get("DATABASE_NAME")
@@ -95,7 +95,14 @@ def get_city_list(request):
 @api_view(['GET'])
 @jwt_required()
 def get_site_list(request):
-    sites = DbConn().get(Models.site, 'search_read', [[['status', '=', 'inprogress']]], {'fields': ['id', 'name']})
+    sites = DbConn().get(Models.site, 'search_read', [[['status', '=', 'inprogress']]],
+                         {'fields': ['id', 'name', 'shape_paths']})
+    for site in sites:
+        site["site_id"] = site.pop("id")
+        shape_path = site["shape_paths"]
+        if shape_path:
+            shape = eval(shape_path.replace('\\', ''))
+            site["shape_paths"] = shape
     return Response({'result': sites, 'status_code': status.HTTP_200_OK}, status=status.HTTP_200_OK)
 
 
@@ -133,6 +140,7 @@ def get_grn_list(request):
                             {'fields': ['name', 'vendor_id', 'site_id', 'grn_date']})
     for grn in grn_list:
         grn["grn_id"] = grn.pop("id")
+        grn["grn_date"] = DateFormat.get(grn["grn_date"])
     return Response({'result': grn_list, 'status_code': status.HTTP_200_OK}, status=status.HTTP_200_OK)
 
 
@@ -151,6 +159,7 @@ def view_grn(request):
         grn["grn_id"] = grn.pop("id")
         grn['grn_lines'] = grn_lines
         grn['status'] = str(grn["status"]).capitalize()
+        grn["grn_date"] = DateFormat.get(grn["grn_date"])
     return Response(
         {'result': grn_details, 'status_code': status.HTTP_200_OK}, status=status.HTTP_200_OK)
 
@@ -235,6 +244,7 @@ def get_pending_purchase_order_list(request):
                                                       'status']})
     for purchase_order in purchase_order_details:
         purchase_order["purchase_order_id"] = purchase_order.pop("id")
+        purchase_order["order_date"] = DateFormat.get(purchase_order["order_date"])
     return Response({'result': purchase_order_details, 'status_code': status.HTTP_200_OK},
                     status=status.HTTP_200_OK)
 
@@ -293,6 +303,7 @@ def get_material_requisition_list(request):
                                              {'fields': ['name', 'site_id', 'requisition_date']})
     for material_requisition in material_requisition_list:
         material_requisition['material_requisition_id'] = material_requisition.pop("id")
+        material_requisition["requisition_date"] = DateFormat.get(material_requisition["requisition_date"])
     return Response({'result': material_requisition_list, 'status_code': status.HTTP_200_OK}, status=status.HTTP_200_OK)
 
 
@@ -327,6 +338,7 @@ def view_material_requisition(request):
     for material_requisition in material_requisition_details:
         material_requisition['material_requisition_id'] = material_requisition.pop("id")
         material_requisition['rqn_lines'] = material_requisition_lines
+        material_requisition["requisition_date"] = DateFormat.get(material_requisition["requisition_date"])
 
     return Response({'result': material_requisition_details, 'status_code': status.HTTP_200_OK},
                     status=status.HTTP_200_OK)
@@ -351,6 +363,7 @@ def add_material_requisition(request):
     for material_requisition in material_requisition_details:
         material_requisition["material_requisition_id"] = material_requisition.pop("id")
         material_requisition['material_requisition_lines'] = material_data
+        material_requisition["requisition_date"] = DateFormat.get(material_requisition["requisition_date"])
     return Response({'result': material_requisition_details, 'status_code': status.HTTP_200_OK},
                     status=status.HTTP_200_OK)
 
@@ -368,11 +381,15 @@ def management_dashboard(request):
     company_id = request.query_params.get('company_id')
     active_sites = DbConn().get(Models.site, 'search_read',
                                 [[['company_id', '=', int(company_id)], ['status', '=', 'inprogress']]],
-                                {'fields': ['name', 'shape_paths', 'shape_type']})
+                                {'fields': ['name', 'shape_paths']})
     total_outstanding = 0.0
     no_of_sites = len(active_sites)
     for site in active_sites:
         site_id = site["id"]
+        shape_path = site["shape_paths"]
+        if shape_path:
+            shape = eval(shape_path.replace('\\', ''))
+            site["shape_paths"] = shape
         due_amount = 0.0
         grn_list = DbConn().get(Models.grn, 'search_read', [[['site_id', '=', site_id], ['status', '=', 'approved']]],
                                 {'fields': ['name', 'total_amount', 'amount_paid']})
