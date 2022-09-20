@@ -22,4 +22,7 @@ urlpatterns = [
     path('add_material_requisition', views.add_material_requisition, name='Add Material Requisition'),
     path('get_company_list', views.get_company_list, name='Get Company List'),
     path('management_dashboard', views.management_dashboard, name='Management Dashboard'),
+    path('forget_password', views.forget_password, name='Forget Password'),
+    path('match_otp', views.match_otp, name='Match OTP'),
+    path('reset_password', views.reset_password, name='Reset Password'),
 ]

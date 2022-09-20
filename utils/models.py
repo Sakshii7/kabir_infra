@@ -1,6 +1,7 @@
 class Models:
     country = 'res.country'
     user = 'res.users'
+    partner = 'res.partner'
     state = 'res.country.state'
     city = 'res.city'
     company = 'res.company'
@@ -14,3 +15,4 @@ class Models:
     material_requisition_line = 'syn.material.requisition.line'
     groups = 'res.groups'
     model_access = 'ir.model.access'
+

@@ -1,4 +1,6 @@
+import random
 import xmlrpc.client
+from datetime import datetime, timedelta
 
 from django_jwt_extended import create_access_token, create_refresh_token, jwt_required, get_jwt_identity
 from rest_framework import status
@@ -6,7 +8,7 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
 from kabir_infra_app.db_conn import DbConn
-from utilis import Environment, Models, DateFormat, TimeFormat
+from utils import Environment, Models, Common
 
 url = Environment.get("HOST_URL")
 db = Environment.get("DATABASE_NAME")
@@ -18,7 +20,6 @@ def login(request):
     username = request.data.get('username')
     password = request.data.get('password')
     try:
-
         user_id = common.authenticate(db, username, password, {})
         user_details = DbConn().get(Models.user, 'read', [[int(user_id)]],
                                     {'fields': ['name', 'partner_id', 'login']})
@@ -140,7 +141,7 @@ def get_grn_list(request):
                             {'fields': ['name', 'vendor_id', 'site_id', 'grn_date']})
     for grn in grn_list:
         grn["grn_id"] = grn.pop("id")
-        grn["grn_date"] = DateFormat.get(grn["grn_date"])
+        grn["grn_date"] = Common.change_date_format(grn["grn_date"])
     return Response({'result': grn_list, 'status_code': status.HTTP_200_OK}, status=status.HTTP_200_OK)
 
 
@@ -159,7 +160,7 @@ def view_grn(request):
         grn["grn_id"] = grn.pop("id")
         grn['grn_lines'] = grn_lines
         grn['status'] = str(grn["status"]).capitalize()
-        grn["grn_date"] = DateFormat.get(grn["grn_date"])
+        grn["grn_date"] = Common.change_date_format(grn["grn_date"])
     return Response(
         {'result': grn_details, 'status_code': status.HTTP_200_OK}, status=status.HTTP_200_OK)
 
@@ -244,7 +245,7 @@ def get_pending_purchase_order_list(request):
                                                       'status']})
     for purchase_order in purchase_order_details:
         purchase_order["purchase_order_id"] = purchase_order.pop("id")
-        purchase_order["order_date"] = DateFormat.get(purchase_order["order_date"])
+        purchase_order["order_date"] = Common.change_date_format(purchase_order["order_date"])
     return Response({'result': purchase_order_details, 'status_code': status.HTTP_200_OK},
                     status=status.HTTP_200_OK)
 
@@ -303,7 +304,8 @@ def get_material_requisition_list(request):
                                              {'fields': ['name', 'site_id', 'requisition_date']})
     for material_requisition in material_requisition_list:
         material_requisition['material_requisition_id'] = material_requisition.pop("id")
-        material_requisition["requisition_date"] = DateFormat.get(material_requisition["requisition_date"])
+        material_requisition["requisition_date"] = Common.change_date_format(
+            material_requisition["requisition_date"])
     return Response({'result': material_requisition_list, 'status_code': status.HTTP_200_OK}, status=status.HTTP_200_OK)
 
 
@@ -338,7 +340,8 @@ def view_material_requisition(request):
     for material_requisition in material_requisition_details:
         material_requisition['material_requisition_id'] = material_requisition.pop("id")
         material_requisition['rqn_lines'] = material_requisition_lines
-        material_requisition["requisition_date"] = DateFormat.get(material_requisition["requisition_date"])
+        material_requisition["requisition_date"] = Common.change_date_format(
+            material_requisition["requisition_date"])
 
     return Response({'result': material_requisition_details, 'status_code': status.HTTP_200_OK},
                     status=status.HTTP_200_OK)
@@ -363,7 +366,8 @@ def add_material_requisition(request):
     for material_requisition in material_requisition_details:
         material_requisition["material_requisition_id"] = material_requisition.pop("id")
         material_requisition['material_requisition_lines'] = material_data
-        material_requisition["requisition_date"] = DateFormat.get(material_requisition["requisition_date"])
+        material_requisition["requisition_date"] = Common.change_date_format(
+            material_requisition["requisition_date"])
     return Response({'result': material_requisition_details, 'status_code': status.HTTP_200_OK},
                     status=status.HTTP_200_OK)
 
@@ -404,3 +408,61 @@ def management_dashboard(request):
     return Response(
         {'result': {'no_of_active_sites': no_of_sites, 'total_outstanding': total_outstanding, 'sites': active_sites},
          'status_code': status.HTTP_200_OK}, status=status.HTTP_200_OK)
+
+
+@api_view(["GET"])
+def forget_password(request):
+    username = request.query_params.get('username')
+    user_details = DbConn().get(Models.user, 'search_read', [[['login', '=', username]]], {'fields': ['partner_id']})
+    user_id = user_details[0]["id"]
+    if user_details:
+        partner_id = user_details[0]["partner_id"][0]
+        current_time = datetime.now()
+        string = current_time.strftime("%Y-%m-%d %H:%M:%S")
+        otp_time = Common.convert_local_time_to_utc(string)
+        otp = random.randint(1000, 9999)
+        DbConn().get(Models.partner, 'write', [[partner_id], {'otp': otp, 'otp_time': otp_time, 'otp_flag': False}])
+        return Response({'result': {'otp': otp, 'user_id': user_id,
+                                    'msg': 'A 4 digit OTP is sent to your registered mobile number'},
+                         'status_code': status.HTTP_200_OK}, status=status.HTTP_200_OK)
+    else:
+        return Response({'result': 'The user does not existed.',
+                         'status_code': status.HTTP_400_BAD_REQUEST}, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['POST'])
+def match_otp(request):
+    otp = request.data.get('otp')
+    user_id = request.data.get('user_id')
+    user_details = DbConn().get(Models.user, 'search_read', [[['id', '=', int(user_id)]]], {'fields': ['partner_id']})
+    partner_id = user_details[0]['partner_id'][0]
+    otp_match = DbConn().get(Models.partner, 'search_read', [[['otp', '=', int(otp)]]],
+                             {'fields': ['otp_time', 'otp_flag']})
+    if otp_match:
+        otp_time = otp_match[0]['otp_time']
+        otp_flag = otp_match[0]['otp_flag']
+        converted_time = Common.convert_utc_to_local_time(otp_time)
+        local_time = datetime.strptime(converted_time, "%Y-%m-%d %H:%M:%S")
+        current_time = datetime.now()
+        expire_time = local_time + timedelta(minutes=15)
+        if otp_match and current_time > expire_time and otp_flag is False:
+            return Response({'result': 'otp time expires', 'status_code': status.HTTP_400_BAD_REQUEST},
+                            status=status.HTTP_400_BAD_REQUEST)
+        elif otp_match and current_time < expire_time and otp_flag is True:
+            return Response({'result': 'otp is already used', 'status_code': status.HTTP_400_BAD_REQUEST},
+                            status=status.HTTP_400_BAD_REQUEST)
+        else:
+            DbConn().get(Models.partner, 'write', [[partner_id], {'otp_flag': True}])
+            return Response({'result': 'otp matched', 'status_code': status.HTTP_200_OK}, status=status.HTTP_200_OK)
+    else:
+        return Response({'result': 'otp does not exist',
+                         'status_code': status.HTTP_400_BAD_REQUEST}, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['POST'])
+def reset_password(request):
+    new_password = request.data.get('new_password')
+    user_id = request.data.get('user_id')
+    DbConn().get(Models.user, 'write', [[int(user_id)], {'password': new_password}])
+    return Response({'result': 'password reset successfully', 'status_code': status.HTTP_200_OK},
+                    status=status.HTTP_200_OK)

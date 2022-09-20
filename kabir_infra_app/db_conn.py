@@ -1,6 +1,6 @@
 import xmlrpc.client
 
-from utilis import Environment
+from utils import Environment
 
 url = Environment.get("HOST_URL")
 db = Environment.get("DATABASE_NAME")
