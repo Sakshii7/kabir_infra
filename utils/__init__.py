@@ -1,4 +1,4 @@
 from .environment import Environment
-from .models import Models
-from .common import Common
+from .odoo_models import Models
+from .common_methods import Common
 

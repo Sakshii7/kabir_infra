@@ -15,4 +15,5 @@ class Models:
     material_requisition_line = 'syn.material.requisition.line'
     groups = 'res.groups'
     model_access = 'ir.model.access'
+    materials = 'syn.material'
 

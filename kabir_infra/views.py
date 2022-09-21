@@ -15,6 +15,7 @@ db = Environment.get("DATABASE_NAME")
 common = xmlrpc.client.ServerProxy('{}/xmlrpc/2/common'.format(url))
 
 
+# Login Api
 @api_view(['POST'])
 def login(request):
     username = request.data.get('username')
@@ -35,10 +36,11 @@ def login(request):
                  'refresh_token': create_refresh_token(identity={'user_details': user_details, 'username': username})},
              'status_code': status.HTTP_200_OK})
     except Exception:
-        return Response({"result": "Invalid Username or Password", "status_code": status.HTTP_400_BAD_REQUEST},
+        return Response({"result": "invalid username or password", "status_code": status.HTTP_400_BAD_REQUEST},
                         status=status.HTTP_400_BAD_REQUEST)
 
 
+# For getting the App Role of the User.
 def get_app_role(user_id):
     category_id = DbConn().get(Models.groups, 'search', [[['category_id', "like", 'Construction Site Management']]])
     app_role = ''
@@ -56,18 +58,93 @@ def get_app_role(user_id):
     return app_role
 
 
+# Refresh Token Api.
+@api_view(['GET'])
+@jwt_required(refresh=True)
+def refresh_token(request):
+    identity = get_jwt_identity(request)
+    return Response({"access_token": create_access_token(identity)})
+
+
+# Generating the OTP after the user forget their password.
+@api_view(["GET"])
+def forget_password(request):
+    username = request.query_params.get('username')
+    user_details = DbConn().get(Models.user, 'search_read', [[['login', '=', username]]], {'fields': ['partner_id']})
+    if user_details:
+        user_id = user_details[0]["id"]
+        partner_id = user_details[0]["partner_id"][0]
+        current_time = datetime.now()
+        string = current_time.strftime("%Y-%m-%d %H:%M:%S")
+        otp_time = Common.convert_local_time_to_utc(string)
+        otp = random.randint(1000, 9999)
+        DbConn().get(Models.partner, 'write', [[partner_id], {'otp': otp, 'otp_time': otp_time, 'otp_flag': False}])
+        return Response({'result': {'otp': otp, 'user_id': user_id,
+                                    'msg': 'A 4 digit OTP is sent to your registered mobile number'},
+                         'status_code': status.HTTP_200_OK}, status=status.HTTP_200_OK)
+    else:
+        return Response({'result': 'user does not exist.',
+                         'status_code': status.HTTP_400_BAD_REQUEST}, status=status.HTTP_400_BAD_REQUEST)
+
+
+# Api for Match the OTP, Check the Expiration Time and Check if the OTP is already used or not.
+@api_view(['POST'])
+def check_otp(request):
+    otp = request.data.get('otp')
+    user_id = request.data.get('user_id')
+    user_details = DbConn().get(Models.user, 'search_read', [[['id', '=', int(user_id)]]], {'fields': ['partner_id']})
+    partner_id = user_details[0]['partner_id'][0]
+    otp_match = DbConn().get(Models.partner, 'search_read', [[['otp', '=', int(otp)]]],
+                             {'fields': ['otp_time', 'otp_flag']})
+    if otp_match:
+        otp_time = otp_match[0]['otp_time']
+        otp_flag = otp_match[0]['otp_flag']
+        converted_time = Common.convert_utc_to_local_time(otp_time)
+        local_time = datetime.strptime(converted_time, "%Y-%m-%d %H:%M:%S")
+        current_time = datetime.now()
+        expire_time = local_time + timedelta(minutes=15)
+        if otp_match and current_time > expire_time:
+            return Response({'result': 'otp time expires', 'status_code': status.HTTP_400_BAD_REQUEST},
+                            status=status.HTTP_400_BAD_REQUEST)
+        elif otp_match and current_time < expire_time and otp_flag is True:
+            return Response({'result': 'otp is already used', 'status_code': status.HTTP_400_BAD_REQUEST},
+                            status=status.HTTP_400_BAD_REQUEST)
+        else:
+            DbConn().get(Models.partner, 'write', [[partner_id], {'otp_flag': True}])
+            return Response({'result': 'otp matched', 'status_code': status.HTTP_200_OK}, status=status.HTTP_200_OK)
+    else:
+        return Response({'result': 'otp does not exist',
+                         'status_code': status.HTTP_400_BAD_REQUEST}, status=status.HTTP_400_BAD_REQUEST)
+
+
+# Api for reset the User's Login Password.
+@api_view(['POST'])
+def reset_password(request):
+    new_password = request.data.get('new_password')
+    user_id = request.data.get('user_id')
+    try:
+        DbConn().get(Models.user, 'write', [[int(user_id)], {'password': new_password}])
+        return Response({'result': 'password reset successfully', 'status_code': status.HTTP_200_OK},
+                        status=status.HTTP_200_OK)
+    except Exception:
+        return Response({"result": "user does not exist", "status_code": status.HTTP_400_BAD_REQUEST},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+
+# logged in User Profile Api.
 @api_view(['GET'])
 @jwt_required()
-def my_profile(request):
+def user_profile(request):
     identity = get_jwt_identity(request)
     partner_id = identity["user_details"][0]["partner_id"][0]
-    user_profile = DbConn().get(Models.user, 'search_read', [[['partner_id', '=', int(partner_id)]]],
+    user_details = DbConn().get(Models.user, 'search_read', [[['partner_id', '=', int(partner_id)]]],
                                 {'fields': ['name', 'father_name', 'code', 'mobile', 'email']})
-    for user in user_profile:
+    for user in user_details:
         user["user_id"] = user.pop("id")
-    return Response({'result': user_profile, 'status_code': status.HTTP_200_OK}, status=status.HTTP_200_OK)
+    return Response({'result': user_details, 'status_code': status.HTTP_200_OK}, status=status.HTTP_200_OK)
 
 
+# Api for getting the Country List.
 @api_view(['GET'])
 @jwt_required()
 def get_country_list(request):
@@ -75,6 +152,7 @@ def get_country_list(request):
     return Response({'result': countries, 'status_code': status.HTTP_200_OK}, status=status.HTTP_200_OK)
 
 
+# Api for getting the State List according to the Country id.
 @api_view(['GET'])
 @jwt_required()
 def get_state_list(request):
@@ -84,6 +162,7 @@ def get_state_list(request):
     return Response({'result': states, 'status_code': status.HTTP_200_OK}, status=status.HTTP_200_OK)
 
 
+# Api for getting the City List according to the State id.
 @api_view(['GET'])
 @jwt_required()
 def get_city_list(request):
@@ -93,11 +172,29 @@ def get_city_list(request):
     return Response({'result': cities, 'status_code': status.HTTP_200_OK}, status=status.HTTP_200_OK)
 
 
+# Api for getting the Material List.
 @api_view(['GET'])
 @jwt_required()
-def get_site_list(request):
+def get_material_list(request):
+    materials = DbConn().get(Models.materials, 'search_read', [[]],
+                             {'fields': ['id', 'name', 'uom_id', 'allowable_tolerance']})
+    return Response({'result': materials, 'status_code': status.HTTP_200_OK}, status=status.HTTP_200_OK)
+
+
+# Api for getting the Vendor List.
+@api_view(['GET'])
+@jwt_required()
+def get_vendor_list(request):
+    vendors = DbConn().get(Models.vendor, 'search_read', [[]], {'fields': ['id', 'name']})
+    return Response({'result': vendors, 'status_code': status.HTTP_200_OK}, status=status.HTTP_200_OK)
+
+
+# Api for getting the Active Sites List.
+@api_view(['GET'])
+@jwt_required()
+def get_active_site_list(request):
     sites = DbConn().get(Models.site, 'search_read', [[['status', '=', 'inprogress']]],
-                         {'fields': ['id', 'name', 'shape_paths']})
+                         {'fields': ['name', 'shape_paths']})
     for site in sites:
         site["site_id"] = site.pop("id")
         shape_path = site["shape_paths"]
@@ -107,13 +204,7 @@ def get_site_list(request):
     return Response({'result': sites, 'status_code': status.HTTP_200_OK}, status=status.HTTP_200_OK)
 
 
-@api_view(['GET'])
-@jwt_required()
-def get_vendor_list(request):
-    vendors = DbConn().get(Models.vendor, 'search_read', [[]], {'fields': ['id', 'name']})
-    return Response({'result': vendors, 'status_code': status.HTTP_200_OK}, status=status.HTTP_200_OK)
-
-
+# Api for getting the Grn List.
 @api_view(['GET'])
 @jwt_required()
 def get_grn_list(request):
@@ -138,13 +229,14 @@ def get_grn_list(request):
     else:
         search_domain
     grn_list = DbConn().get(Models.grn, 'search_read', [search_domain],
-                            {'fields': ['name', 'vendor_id', 'site_id', 'grn_date']})
+                            {'fields': ['name', 'vendor_id', 'grn_date']})
     for grn in grn_list:
         grn["grn_id"] = grn.pop("id")
         grn["grn_date"] = Common.change_date_format(grn["grn_date"])
     return Response({'result': grn_list, 'status_code': status.HTTP_200_OK}, status=status.HTTP_200_OK)
 
 
+# Api for Viewing the Particular Grn.
 @api_view(['GET'])
 @jwt_required()
 def view_grn(request):
@@ -165,6 +257,7 @@ def view_grn(request):
         {'result': grn_details, 'status_code': status.HTTP_200_OK}, status=status.HTTP_200_OK)
 
 
+# Api for getting purchase order list according to Site and Vendor id.
 @api_view(['GET'])
 @jwt_required()
 def ref_purchase_order_list(request):
@@ -188,6 +281,7 @@ def ref_purchase_order_list(request):
     return Response({'result': purchase_order_list, 'status_code': status.HTTP_200_OK}, status=status.HTTP_200_OK)
 
 
+# Api for Adding the Grn.
 @api_view(['POST'])
 @jwt_required()
 def add_grn(request):
@@ -221,6 +315,7 @@ def add_grn(request):
     return Response({'result': grn_details, 'status_code': status.HTTP_200_OK}, status=status.HTTP_200_OK)
 
 
+# Api for getting the Pending Purchase Order List.
 @api_view(['GET'])
 @jwt_required()
 def get_pending_purchase_order_list(request):
@@ -241,30 +336,30 @@ def get_pending_purchase_order_list(request):
     else:
         domain
     purchase_order_details = DbConn().get(Models.purchase_order, 'search_read', [domain],
-                                          {'fields': ['name', 'company_id', 'site_id', 'vendor_id', 'order_date',
-                                                      'status']})
+                                          {'fields': ['name', 'vendor_id', 'order_date', 'status']})
     for purchase_order in purchase_order_details:
         purchase_order["purchase_order_id"] = purchase_order.pop("id")
         purchase_order["order_date"] = Common.change_date_format(purchase_order["order_date"])
+        purchase_order['status'] = str(purchase_order["status"]).capitalize()
     return Response({'result': purchase_order_details, 'status_code': status.HTTP_200_OK},
                     status=status.HTTP_200_OK)
 
 
+# Api for the View of Particular Purchase Order and show the balance quantity after calculating the allowable tolerance.
 @api_view(['GET'])
 @jwt_required()
 def view_purchase_order(request):
     purchase_order_id = request.query_params.get("purchase_order_id")
     purchase_order_details = DbConn().get(Models.purchase_order, 'read',
                                           [[int(purchase_order_id)]], {
-                                              'fields': ['name', 'company_id', 'site_id', 'vendor_id',
-                                                         'material_requisition_id', 'status']})
+                                              'fields': ['name', 'site_id', 'vendor_id', 'order_date', 'status']})
     purchase_order_lines = DbConn().get(Models.purchase_order_line, 'search_read',
                                         [[["purchase_order_id", "=", int(purchase_order_id)]]],
                                         {'fields': ['material_id', 'quantity', 'qty_received', 'uom_id']})
     for line in purchase_order_lines:
         line["purchase_order_line_id"] = line.pop("id")
         material_id = line["material_id"][0]
-        materials = DbConn().get('syn.material', 'read', [[material_id]], {'fields': ['allowable_tolerance']})
+        materials = DbConn().get(Models.materials, 'read', [[material_id]], {'fields': ['allowable_tolerance']})
         allowable_tolerance = materials[0]['allowable_tolerance']
         calculation = line["quantity"] * allowable_tolerance / 100 + line["quantity"] - line["qty_received"]
         line["balance_qty"] = round(calculation)
@@ -277,6 +372,7 @@ def view_purchase_order(request):
         {'result': purchase_order_details, 'status_code': status.HTTP_200_OK}, status=status.HTTP_200_OK)
 
 
+# Api for getting the Material Requisition List.
 @api_view(['GET'])
 @jwt_required()
 def get_material_requisition_list(request):
@@ -301,7 +397,7 @@ def get_material_requisition_list(request):
     else:
         domain
     material_requisition_list = DbConn().get(Models.material_requisition, 'search_read', [domain],
-                                             {'fields': ['name', 'site_id', 'requisition_date']})
+                                             {'fields': ['name', 'requisition_date']})
     for material_requisition in material_requisition_list:
         material_requisition['material_requisition_id'] = material_requisition.pop("id")
         material_requisition["requisition_date"] = Common.change_date_format(
@@ -309,6 +405,7 @@ def get_material_requisition_list(request):
     return Response({'result': material_requisition_list, 'status_code': status.HTTP_200_OK}, status=status.HTTP_200_OK)
 
 
+# Api for the View of the Particular Material Requisition.
 @api_view(['GET'])
 @jwt_required()
 def view_material_requisition(request):
@@ -347,6 +444,7 @@ def view_material_requisition(request):
                     status=status.HTTP_200_OK)
 
 
+# Api for Adding the Material Requisition.
 @api_view(['POST'])
 @jwt_required()
 def add_material_requisition(request):
@@ -372,6 +470,7 @@ def add_material_requisition(request):
                     status=status.HTTP_200_OK)
 
 
+# Api for getting the Company List.
 @api_view(['GET'])
 @jwt_required()
 def get_company_list(request):
@@ -379,6 +478,7 @@ def get_company_list(request):
     return Response({'result': companies, 'status_code': status.HTTP_200_OK}, status=status.HTTP_200_OK)
 
 
+# Management Dashboard Api for getting the No. of Active Site List and Total Outstanding of the Grn List.
 @api_view(['GET'])
 @jwt_required()
 def management_dashboard(request):
@@ -408,61 +508,3 @@ def management_dashboard(request):
     return Response(
         {'result': {'no_of_active_sites': no_of_sites, 'total_outstanding': total_outstanding, 'sites': active_sites},
          'status_code': status.HTTP_200_OK}, status=status.HTTP_200_OK)
-
-
-@api_view(["GET"])
-def forget_password(request):
-    username = request.query_params.get('username')
-    user_details = DbConn().get(Models.user, 'search_read', [[['login', '=', username]]], {'fields': ['partner_id']})
-    user_id = user_details[0]["id"]
-    if user_details:
-        partner_id = user_details[0]["partner_id"][0]
-        current_time = datetime.now()
-        string = current_time.strftime("%Y-%m-%d %H:%M:%S")
-        otp_time = Common.convert_local_time_to_utc(string)
-        otp = random.randint(1000, 9999)
-        DbConn().get(Models.partner, 'write', [[partner_id], {'otp': otp, 'otp_time': otp_time, 'otp_flag': False}])
-        return Response({'result': {'otp': otp, 'user_id': user_id,
-                                    'msg': 'A 4 digit OTP is sent to your registered mobile number'},
-                         'status_code': status.HTTP_200_OK}, status=status.HTTP_200_OK)
-    else:
-        return Response({'result': 'The user does not existed.',
-                         'status_code': status.HTTP_400_BAD_REQUEST}, status=status.HTTP_400_BAD_REQUEST)
-
-
-@api_view(['POST'])
-def match_otp(request):
-    otp = request.data.get('otp')
-    user_id = request.data.get('user_id')
-    user_details = DbConn().get(Models.user, 'search_read', [[['id', '=', int(user_id)]]], {'fields': ['partner_id']})
-    partner_id = user_details[0]['partner_id'][0]
-    otp_match = DbConn().get(Models.partner, 'search_read', [[['otp', '=', int(otp)]]],
-                             {'fields': ['otp_time', 'otp_flag']})
-    if otp_match:
-        otp_time = otp_match[0]['otp_time']
-        otp_flag = otp_match[0]['otp_flag']
-        converted_time = Common.convert_utc_to_local_time(otp_time)
-        local_time = datetime.strptime(converted_time, "%Y-%m-%d %H:%M:%S")
-        current_time = datetime.now()
-        expire_time = local_time + timedelta(minutes=15)
-        if otp_match and current_time > expire_time and otp_flag is False:
-            return Response({'result': 'otp time expires', 'status_code': status.HTTP_400_BAD_REQUEST},
-                            status=status.HTTP_400_BAD_REQUEST)
-        elif otp_match and current_time < expire_time and otp_flag is True:
-            return Response({'result': 'otp is already used', 'status_code': status.HTTP_400_BAD_REQUEST},
-                            status=status.HTTP_400_BAD_REQUEST)
-        else:
-            DbConn().get(Models.partner, 'write', [[partner_id], {'otp_flag': True}])
-            return Response({'result': 'otp matched', 'status_code': status.HTTP_200_OK}, status=status.HTTP_200_OK)
-    else:
-        return Response({'result': 'otp does not exist',
-                         'status_code': status.HTTP_400_BAD_REQUEST}, status=status.HTTP_400_BAD_REQUEST)
-
-
-@api_view(['POST'])
-def reset_password(request):
-    new_password = request.data.get('new_password')
-    user_id = request.data.get('user_id')
-    DbConn().get(Models.user, 'write', [[int(user_id)], {'password': new_password}])
-    return Response({'result': 'password reset successfully', 'status_code': status.HTTP_200_OK},
-                    status=status.HTTP_200_OK)

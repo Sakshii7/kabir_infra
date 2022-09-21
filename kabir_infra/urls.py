@@ -3,13 +3,18 @@ from django.urls import path
 from . import views
 
 urlpatterns = [
-    path('login', views.login, name='login'),
-    path('my_profile', views.my_profile, name='User Profile'),
+    path('login', views.login, name='Login'),
+    path('refresh_token', views.refresh_token, name='Refresh Token'),
+    path('forget_password', views.forget_password, name='Forget Password'),
+    path('check_otp', views.check_otp, name='Check OTP'),
+    path('reset_password', views.reset_password, name='Reset Password'),
+    path('user_profile', views.user_profile, name='User Profile'),
     path('get_country_list', views.get_country_list, name='Get Country list'),
     path('get_state_list', views.get_state_list, name='Get State list'),
     path('get_city_list', views.get_city_list, name='Get City list'),
-    path('get_site_list', views.get_site_list, name='Get Site list'),
+    path('get_material_list', views.get_material_list, name='Get Material list'),
     path('get_vendor_list', views.get_vendor_list, name='Get Vendor list'),
+    path('get_active_site_list', views.get_active_site_list, name='Get Active Site list'),
     path('get_grn_list', views.get_grn_list, name='Get GRN list'),
     path('view_grn', views.view_grn, name='GRN View'),
     path('ref_purchase_order_list', views.ref_purchase_order_list, name='Ref Purchase order List'),
@@ -22,7 +27,4 @@ urlpatterns = [
     path('add_material_requisition', views.add_material_requisition, name='Add Material Requisition'),
     path('get_company_list', views.get_company_list, name='Get Company List'),
     path('management_dashboard', views.management_dashboard, name='Management Dashboard'),
-    path('forget_password', views.forget_password, name='Forget Password'),
-    path('match_otp', views.match_otp, name='Match OTP'),
-    path('reset_password', views.reset_password, name='Reset Password'),
 ]
