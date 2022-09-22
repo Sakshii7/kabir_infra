@@ -1,3 +1,4 @@
+import base64
 import random
 import xmlrpc.client
 from datetime import datetime, timedelta
@@ -293,9 +294,14 @@ def add_grn(request):
     po_line_id = request.data.get('po_line_id')
     qty_received = request.data.get('qty_received')
     document_date = request.data.get('document_date')
+    image = request.data.get('image')
+    binary_image = xmlrpc.client.Binary(image.read())
+    bytes_image = binary_image.data
+    image_base64 = base64.b64encode(bytes_image)
+    grn_image = image_base64.decode('ascii')
     grn_id = DbConn().get(Models.grn, 'create', [
         {'site_id': int(site_id), 'vendor_id': int(vendor_id), 'purchase_order_id': int(purchase_order_id),
-         'vehicle_no': vehicle_no, 'document_no': document_no, 'document_date': document_date}])
+         'vehicle_no': vehicle_no, 'document_no': document_no, 'document_date': document_date, 'image': grn_image}])
     grn_details = DbConn().get(Models.grn, 'read', [[grn_id]],
                                {'fields': ['site_id', 'vendor_id', 'purchase_order_id', 'vehicle_no']})
     po_line_details = DbConn().get(Models.purchase_order_line, 'read', [[int(po_line_id)]],
@@ -508,3 +514,16 @@ def management_dashboard(request):
     return Response(
         {'result': {'no_of_active_sites': no_of_sites, 'total_outstanding': total_outstanding, 'sites': active_sites},
          'status_code': status.HTTP_200_OK}, status=status.HTTP_200_OK)
+
+
+# @api_view(['POST'])
+# def upload_image(request):
+#     file = request.data.get('file')
+#     grn_id = request.data.get('grn_id')
+#     binary_video = xmlrpc.client.Binary(file.read())
+#     bytes_image = binary_video.data
+#     image_base64 = base64.b64encode(bytes_image)
+#     video = image_base64.decode('type')
+#     DbConn().get(Models.grn, 'write', [[int(grn_id)], {'video': video}])
+#     return Response({'result': 'image uploaded successfully', 'status_code': status.HTTP_200_OK},
+#                     status=status.HTTP_200_OK)
