@@ -16,6 +16,15 @@ db = Environment.get("DATABASE_NAME")
 common = xmlrpc.client.ServerProxy('{}/xmlrpc/2/common'.format(url))
 
 
+def decode_binary_file(file_name):
+    file = file_name
+    binary_file = xmlrpc.client.Binary(file.read())
+    bytes_file = binary_file.data
+    file_base64 = base64.b64encode(bytes_file)
+    decoded_file = file_base64.decode('ascii')
+    return decoded_file
+
+
 # Login Api
 @api_view(['POST'])
 def login(request):
@@ -294,14 +303,16 @@ def add_grn(request):
     po_line_id = request.data.get('po_line_id')
     qty_received = request.data.get('qty_received')
     document_date = request.data.get('document_date')
-    image = request.data.get('image')
-    binary_image = xmlrpc.client.Binary(image.read())
-    bytes_image = binary_image.data
-    image_base64 = base64.b64encode(bytes_image)
-    grn_image = image_base64.decode('ascii')
+    grn_image = request.data.get('grn_image')
+    grn_video = request.data.get('grn_video')
+    decoded_image_file = decode_binary_file(grn_image)
+    decoded_video_file = decode_binary_file(grn_video)
+    video_file_name = grn_video.name
     grn_id = DbConn().get(Models.grn, 'create', [
         {'site_id': int(site_id), 'vendor_id': int(vendor_id), 'purchase_order_id': int(purchase_order_id),
-         'vehicle_no': vehicle_no, 'document_no': document_no, 'document_date': document_date, 'image': grn_image}])
+         'vehicle_no': vehicle_no, 'document_no': document_no, 'document_date': document_date,
+         'grn_image': decoded_image_file,
+         'grn_video': decoded_video_file, 'video_file_name': video_file_name}])
     grn_details = DbConn().get(Models.grn, 'read', [[grn_id]],
                                {'fields': ['site_id', 'vendor_id', 'purchase_order_id', 'vehicle_no']})
     po_line_details = DbConn().get(Models.purchase_order_line, 'read', [[int(po_line_id)]],
@@ -514,16 +525,3 @@ def management_dashboard(request):
     return Response(
         {'result': {'no_of_active_sites': no_of_sites, 'total_outstanding': total_outstanding, 'sites': active_sites},
          'status_code': status.HTTP_200_OK}, status=status.HTTP_200_OK)
-
-
-# @api_view(['POST'])
-# def upload_image(request):
-#     file = request.data.get('file')
-#     grn_id = request.data.get('grn_id')
-#     binary_video = xmlrpc.client.Binary(file.read())
-#     bytes_image = binary_video.data
-#     image_base64 = base64.b64encode(bytes_image)
-#     video = image_base64.decode('type')
-#     DbConn().get(Models.grn, 'write', [[int(grn_id)], {'video': video}])
-#     return Response({'result': 'image uploaded successfully', 'status_code': status.HTTP_200_OK},
-#                     status=status.HTTP_200_OK)
