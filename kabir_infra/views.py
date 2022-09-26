@@ -30,8 +30,8 @@ def decode_binary_file(file_name):
 def login(request):
     username = request.data.get('username')
     password = request.data.get('password')
-    try:
-        user_id = common.authenticate(db, username, password, {})
+    user_id = common.authenticate(db, username, password, {})
+    if user_id:
         user_details = DbConn().get(Models.user, 'read', [[int(user_id)]],
                                     {'fields': ['name', 'partner_id', 'login']})
         app_role = get_app_role(user_id)
@@ -45,8 +45,8 @@ def login(request):
                  "access_token": create_access_token(identity={'user_details': user_details, 'username': username}),
                  'refresh_token': create_refresh_token(identity={'user_details': user_details, 'username': username})},
              'status_code': status.HTTP_200_OK})
-    except Exception:
-        return Response({"result": "invalid username or password", "status_code": status.HTTP_400_BAD_REQUEST},
+    else:
+        return Response({"result": " Invalid username or password", "status_code": status.HTTP_400_BAD_REQUEST},
                         status=status.HTTP_400_BAD_REQUEST)
 
 
@@ -81,20 +81,16 @@ def refresh_token(request):
 def forget_password(request):
     username = request.query_params.get('username')
     user_details = DbConn().get(Models.user, 'search_read', [[['login', '=', username]]], {'fields': ['partner_id']})
-    if user_details:
-        user_id = user_details[0]["id"]
-        partner_id = user_details[0]["partner_id"][0]
-        current_time = datetime.now()
-        string = current_time.strftime("%Y-%m-%d %H:%M:%S")
-        otp_time = Common.convert_local_time_to_utc(string)
-        otp = random.randint(1000, 9999)
-        DbConn().get(Models.partner, 'write', [[partner_id], {'otp': otp, 'otp_time': otp_time, 'otp_flag': False}])
-        return Response({'result': {'otp': otp, 'user_id': user_id,
-                                    'msg': 'A 4 digit OTP is sent to your registered mobile number'},
-                         'status_code': status.HTTP_200_OK}, status=status.HTTP_200_OK)
-    else:
-        return Response({'result': 'user does not exist.',
-                         'status_code': status.HTTP_400_BAD_REQUEST}, status=status.HTTP_400_BAD_REQUEST)
+    user_id = user_details[0]["id"]
+    partner_id = user_details[0]["partner_id"][0]
+    current_time = datetime.now()
+    string = current_time.strftime("%Y-%m-%d %H:%M:%S")
+    otp_time = Common.convert_local_time_to_utc(string)
+    otp = random.randint(1000, 9999)
+    DbConn().get(Models.partner, 'write', [[partner_id], {'otp': otp, 'otp_time': otp_time, 'otp_flag': False}])
+    return Response({'result': {'otp': otp, 'user_id': user_id,
+                                'msg': 'A 4 digit OTP is sent to your registered mobile number'},
+                     'status_code': status.HTTP_200_OK}, status=status.HTTP_200_OK)
 
 
 # Api for Match the OTP, Check the Expiration Time and Check if the OTP is already used or not.
@@ -132,13 +128,10 @@ def check_otp(request):
 def reset_password(request):
     new_password = request.data.get('new_password')
     user_id = request.data.get('user_id')
-    try:
-        DbConn().get(Models.user, 'write', [[int(user_id)], {'password': new_password}])
-        return Response({'result': 'password reset successfully', 'status_code': status.HTTP_200_OK},
-                        status=status.HTTP_200_OK)
-    except Exception:
-        return Response({"result": "user does not exist", "status_code": status.HTTP_400_BAD_REQUEST},
-                        status=status.HTTP_400_BAD_REQUEST)
+
+    DbConn().get(Models.user, 'write', [[int(user_id)], {'password': new_password}])
+    return Response({'result': 'Password reset successfully', 'status_code': status.HTTP_200_OK},
+                    status=status.HTTP_200_OK)
 
 
 # logged in User Profile Api.
@@ -308,6 +301,7 @@ def add_grn(request):
     decoded_image_file = decode_binary_file(grn_image)
     decoded_video_file = decode_binary_file(grn_video)
     video_file_name = grn_video.name
+    content = grn_video.content_type
     grn_id = DbConn().get(Models.grn, 'create', [
         {'site_id': int(site_id), 'vendor_id': int(vendor_id), 'purchase_order_id': int(purchase_order_id),
          'vehicle_no': vehicle_no, 'document_no': document_no, 'document_date': document_date,
@@ -315,6 +309,13 @@ def add_grn(request):
          'grn_video': decoded_video_file, 'video_file_name': video_file_name}])
     grn_details = DbConn().get(Models.grn, 'read', [[grn_id]],
                                {'fields': ['site_id', 'vendor_id', 'purchase_order_id', 'vehicle_no']})
+    attachment_id = DbConn().get('ir.attachment', 'search', [
+        [['res_model', '=', 'syn.grn'], ['res_field', '=', 'grn_video'], ['res_id', '=', grn_id]]])
+
+    DbConn().get(Models.attachments, 'write', [[attachment_id[0]], {
+        'mimetype': content,
+        'index_content': 'video',
+    }])
     po_line_details = DbConn().get(Models.purchase_order_line, 'read', [[int(po_line_id)]],
                                    {'fields': ['rate_per_uom', 'uom_id']})
     rate_per_uom = po_line_details[0]['rate_per_uom']

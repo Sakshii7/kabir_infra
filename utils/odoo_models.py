@@ -16,4 +16,4 @@ class Models:
     groups = 'res.groups'
     model_access = 'ir.model.access'
     materials = 'syn.material'
-
+    attachments = 'ir.attachment'
