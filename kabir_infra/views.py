@@ -16,9 +16,9 @@ db = Environment.get("DATABASE_NAME")
 common = xmlrpc.client.ServerProxy('{}/xmlrpc/2/common'.format(url))
 
 
-def decode_binary_file(file_name):
-    file = file_name
-    binary_file = xmlrpc.client.Binary(file.read())
+def decode_binary_file(file):
+    file_name = file
+    binary_file = xmlrpc.client.Binary(file_name.read())
     bytes_file = binary_file.data
     file_base64 = base64.b64encode(bytes_file)
     decoded_file = file_base64.decode('ascii')
@@ -46,7 +46,7 @@ def login(request):
                  'refresh_token': create_refresh_token(identity={'user_details': user_details, 'username': username})},
              'status_code': status.HTTP_200_OK})
     else:
-        return Response({"result": " Invalid username or password", "status_code": status.HTTP_400_BAD_REQUEST},
+        return Response({"result": "Invalid username or password", "status_code": status.HTTP_400_BAD_REQUEST},
                         status=status.HTTP_400_BAD_REQUEST)
 
 
@@ -65,6 +65,7 @@ def get_app_role(user_id):
             app_role = "supervisior"
         else:
             app_role
+
     return app_role
 
 
@@ -141,8 +142,9 @@ def user_profile(request):
     identity = get_jwt_identity(request)
     partner_id = identity["user_details"][0]["partner_id"][0]
     user_details = DbConn().get(Models.user, 'search_read', [[['partner_id', '=', int(partner_id)]]],
-                                {'fields': ['name', 'father_name', 'code', 'mobile', 'email']})
+                                {'fields': ['name', 'mobile', 'email']})
     for user in user_details:
+        user["username"] = user.pop("email")
         user["user_id"] = user.pop("id")
     return Response({'result': user_details, 'status_code': status.HTTP_200_OK}, status=status.HTTP_200_OK)
 
@@ -207,7 +209,7 @@ def get_active_site_list(request):
     return Response({'result': sites, 'status_code': status.HTTP_200_OK}, status=status.HTTP_200_OK)
 
 
-# Api for getting the Grn List.
+# Api for getting the GRN List.
 @api_view(['GET'])
 @jwt_required()
 def get_grn_list(request):
@@ -239,7 +241,7 @@ def get_grn_list(request):
     return Response({'result': grn_list, 'status_code': status.HTTP_200_OK}, status=status.HTTP_200_OK)
 
 
-# Api for Viewing the Particular Grn.
+# Api for Viewing the Particular GRN.
 @api_view(['GET'])
 @jwt_required()
 def view_grn(request):
@@ -284,7 +286,7 @@ def ref_purchase_order_list(request):
     return Response({'result': purchase_order_list, 'status_code': status.HTTP_200_OK}, status=status.HTTP_200_OK)
 
 
-# Api for Adding the Grn.
+# Api for Adding the GRN.
 @api_view(['POST'])
 @jwt_required()
 def add_grn(request):
@@ -302,13 +304,13 @@ def add_grn(request):
     decoded_video_file = decode_binary_file(grn_video)
     video_file_name = grn_video.name
     content = grn_video.content_type
+
     grn_id = DbConn().get(Models.grn, 'create', [
         {'site_id': int(site_id), 'vendor_id': int(vendor_id), 'purchase_order_id': int(purchase_order_id),
          'vehicle_no': vehicle_no, 'document_no': document_no, 'document_date': document_date,
          'grn_image': decoded_image_file,
          'grn_video': decoded_video_file, 'video_file_name': video_file_name}])
-    grn_details = DbConn().get(Models.grn, 'read', [[grn_id]],
-                               {'fields': ['site_id', 'vendor_id', 'purchase_order_id', 'vehicle_no']})
+
     attachment_id = DbConn().get('ir.attachment', 'search', [
         [['res_model', '=', 'syn.grn'], ['res_field', '=', 'grn_video'], ['res_id', '=', grn_id]]])
 
@@ -323,13 +325,20 @@ def add_grn(request):
     grn_line_id = DbConn().get(Models.grn_line, 'create', [
         {'grn_id': grn_id, 'material_id': po_line_id, 'rate_per_uom': rate_per_uom, 'uom_id': uom_id,
          'qty_received': qty_received}])
+
+    grn_details = DbConn().get(Models.grn, 'search_read', [[]],
+                               {'fields': ['site_id', 'vendor_id', 'purchase_order_id', 'vehicle_no']})
+
     grn_lines = DbConn().get(Models.grn_line, 'read', [[grn_line_id]],
                              {'fields': ['material_id', 'rate_per_uom', 'uom_id', 'qty_received']})
+
     for grn in grn_details:
         grn["grn_id"] = grn.pop("id")
         grn['grn_lines'] = grn_lines
+
     for line in grn_lines:
         line['grn_line_id'] = line.pop("id")
+
     return Response({'result': grn_details, 'status_code': status.HTTP_200_OK}, status=status.HTTP_200_OK)
 
 
@@ -376,8 +385,8 @@ def view_purchase_order(request):
                                         {'fields': ['material_id', 'quantity', 'qty_received', 'uom_id']})
     for line in purchase_order_lines:
         line["purchase_order_line_id"] = line.pop("id")
-        material_id = line["material_id"][0]
-        materials = DbConn().get(Models.materials, 'read', [[material_id]], {'fields': ['allowable_tolerance']})
+        materials = DbConn().get(Models.materials, 'read', [[line.get('material_id')[0]]],
+                                 {'fields': ['allowable_tolerance']})
         allowable_tolerance = materials[0]['allowable_tolerance']
         calculation = line["quantity"] * allowable_tolerance / 100 + line["quantity"] - line["qty_received"]
         line["balance_qty"] = round(calculation)
@@ -386,6 +395,7 @@ def view_purchase_order(request):
         purchase_order["purchase_order_id"] = purchase_order.pop("id")
         purchase_order['status'] = str(purchase_order["status"]).capitalize()
         purchase_order['purchase_order_lines'] = purchase_order_lines
+        purchase_order['order_date'] = Common.change_date_format(purchase_order['order_date'])
     return Response(
         {'result': purchase_order_details, 'status_code': status.HTTP_200_OK}, status=status.HTTP_200_OK)
 
@@ -429,7 +439,7 @@ def get_material_requisition_list(request):
 def view_material_requisition(request):
     material_requisition_id = request.query_params.get("material_requisition_id")
     material_requisition_details = DbConn().get(Models.material_requisition, 'read', [[int(material_requisition_id)]],
-                                                {'fields': ['name', 'site_id', 'requisition_date', ]})
+                                                {'fields': ['name', 'site_id', 'requisition_date']})
     material_requisition_lines = DbConn().get(Models.material_requisition_line, 'search_read',
                                               [[['material_requisition_id', '=', int(material_requisition_id)]]],
                                               {'fields': ['material_id', 'quantity', 'uom_id']})
@@ -496,7 +506,7 @@ def get_company_list(request):
     return Response({'result': companies, 'status_code': status.HTTP_200_OK}, status=status.HTTP_200_OK)
 
 
-# Management Dashboard Api for getting the No. of Active Site List and Total Outstanding of the Grn List.
+# Management Dashboard Api for getting the No. of Active Site List and Total Outstanding of the GRN List.
 @api_view(['GET'])
 @jwt_required()
 def management_dashboard(request):
@@ -507,13 +517,13 @@ def management_dashboard(request):
     total_outstanding = 0.0
     no_of_sites = len(active_sites)
     for site in active_sites:
-        site_id = site["id"]
         shape_path = site["shape_paths"]
         if shape_path:
             shape = eval(shape_path.replace('\\', ''))
             site["shape_paths"] = shape
         due_amount = 0.0
-        grn_list = DbConn().get(Models.grn, 'search_read', [[['site_id', '=', site_id], ['status', '=', 'approved']]],
+        grn_list = DbConn().get(Models.grn, 'search_read',
+                                [[['site_id', '=', site.get('id')], ['status', '=', 'approved']]],
                                 {'fields': ['name', 'total_amount', 'amount_paid']})
         for grn in grn_list:
             total_amount = grn['total_amount']

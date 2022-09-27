@@ -50,7 +50,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    # 'utils.exception.ExceptionMiddleware',
+    'utils.custom_exception_handler.ExceptionMiddleware',
 ]
 
 ROOT_URLCONF = 'kabir_infra_app.urls'
