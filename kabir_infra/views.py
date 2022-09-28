@@ -182,6 +182,8 @@ def get_city_list(request):
 def get_material_list(request):
     materials = DbConn().get(Models.materials, 'search_read', [[]],
                              {'fields': ['id', 'name', 'uom_id', 'allowable_tolerance']})
+    for mat in materials:
+        mat['uom_id'][1] = Common.convert_string_to_unicode_string(mat['uom_id'][1])
     return Response({'result': materials, 'status_code': status.HTTP_200_OK}, status=status.HTTP_200_OK)
 
 
@@ -534,3 +536,9 @@ def management_dashboard(request):
     return Response(
         {'result': {'no_of_active_sites': no_of_sites, 'total_outstanding': total_outstanding, 'sites': active_sites},
          'status_code': status.HTTP_200_OK}, status=status.HTTP_200_OK)
+
+
+@api_view(['GET'])
+def testing(request):
+    grn = DbConn().get(Models.grn, 'search_read', [[]], {'fields': ['grn_image']})
+    return Response(grn)
