@@ -1,5 +1,5 @@
-from rest_framework import status
 from django.http import JsonResponse
+from kabir_infra_app import settings
 
 
 def get_response(result="", status_code=200):
@@ -14,14 +14,17 @@ class ExceptionMiddleware(object):
         self.get_response = exc_get_response
 
     def __call__(self, request):
-
         response = self.get_response(request)
-
-        if response.status_code != 200:
-            response = get_response(
-                result="Bad request",
-                status_code=400
-            )
-            return JsonResponse(response, status=status.HTTP_400_BAD_REQUEST)
-
         return response
+
+    @staticmethod
+    def process_exception(request, exception):
+        if settings.DEBUG:
+            if exception:
+                msg = f'{exception.__class__.__name__}: {exception}'
+                print(msg)
+                response = get_response(
+                    result="Bad request",
+                    status_code=400
+                )
+                return JsonResponse(response, status=response['status_code'])

@@ -96,7 +96,7 @@ def forget_password(request):
 
 # Api for Match the OTP, Check the Expiration Time and Check if the OTP is already used or not.
 @api_view(['POST'])
-def check_otp(request):
+def match_otp(request):
     otp = request.data.get('otp')
     user_id = request.data.get('user_id')
     user_details = DbConn().get(Models.user, 'search_read', [[['id', '=', int(user_id)]]], {'fields': ['partner_id']})
@@ -144,7 +144,6 @@ def user_profile(request):
     user_details = DbConn().get(Models.user, 'search_read', [[['partner_id', '=', int(partner_id)]]],
                                 {'fields': ['name', 'mobile', 'email']})
     for user in user_details:
-        user["username"] = user.pop("email")
         user["user_id"] = user.pop("id")
     return Response({'result': user_details, 'status_code': status.HTTP_200_OK}, status=status.HTTP_200_OK)
 
@@ -452,9 +451,8 @@ def view_material_requisition(request):
         material_id = line["material_id"][0]
         po_list = []
         for po in purchase_order_list:
-            po_id = po["id"]
             purchase_order_lines = DbConn().get(Models.purchase_order_line, 'search_read',
-                                                [[["purchase_order_id", "=", po_id],
+                                                [[["purchase_order_id", "=", po.get('id')],
                                                   ['material_id', '=', material_id]]],
                                                 {'fields': ['material_id', 'purchase_order_id']})
             if purchase_order_lines:
