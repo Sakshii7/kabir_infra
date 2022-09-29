@@ -31,12 +31,13 @@ class Common:
 
     @staticmethod
     def convert_string_to_unicode_string(str_format):
-        str_data = str_format[-1]
-        unicode_string = ''.join(r'\u{:04X}'.format(ord(str_data)))
-        return unicode_string
+        if "³" in str_format or "²" in str_format or "¹" in str_format:
+            last_string = str_format[-1]
+            rest_string = str_format[:-1]
+            unicode_string = ''.join(r'\u{:04X}'.format(ord(last_string)))
+            result = rest_string + unicode_string
+            return result
+        else:
+            return str_format
 
 
-regular = "in³"
-x = regular[-1]
-res = ''.join(r'\u{:04X}'.format(ord(x)))
-print(res)
