@@ -2,12 +2,14 @@ import base64
 import random
 import xmlrpc.client
 from datetime import datetime, timedelta
-
+import cv2
+import os
+import PIL
 from django_jwt_extended import create_access_token, create_refresh_token, jwt_required, get_jwt_identity
 from rest_framework import status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
-
+from PIL import Image
 from kabir_infra_app.db_conn import DbConn
 from utils import Environment, Models, Common
 
@@ -538,7 +540,14 @@ def management_dashboard(request):
          'status_code': status.HTTP_200_OK}, status=status.HTTP_200_OK)
 
 
-@api_view(['GET'])
-def testing(request):
-    grn = DbConn().get(Models.grn, 'search_read', [[]], {'fields': ['grn_image']})
-    return Response(grn)
+# @api_view(['POST'])
+# def testing(request):
+#     file_serializer = request.data.get('file_serializer')
+#     decoded_image_file = decode_binary_file(file_serializer)
+#     path = r'C:\Users\HP\Downloads\download.png'
+#     directory = r'E:\kabir_infra_app\kabir_infra\media'
+#     img = cv2.imread(path)
+#     os.chdir(directory)
+#     filename = 'grn_images.png'
+#     cv2.imwrite(filename, img)
+#     return Response(status=status.HTTP_201_CREATED)

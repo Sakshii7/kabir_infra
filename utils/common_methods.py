@@ -31,7 +31,7 @@ class Common:
 
     @staticmethod
     def convert_string_to_unicode_string(str_format):
-        if "³" in str_format or "²" in str_format or "¹" in str_format:
+        if "³" in str_format or "²" in str_format:
             last_string = str_format[-1]
             rest_string = str_format[:-1]
             unicode_string = ''.join(r'\u{:04X}'.format(ord(last_string)))
@@ -39,5 +39,3 @@ class Common:
             return result
         else:
             return str_format
-
-
