@@ -1,15 +1,14 @@
 import base64
+import os
 import random
 import xmlrpc.client
 from datetime import datetime, timedelta
-import cv2
-import os
-import PIL
+
+from django.http import FileResponse
 from django_jwt_extended import create_access_token, create_refresh_token, jwt_required, get_jwt_identity
 from rest_framework import status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
-from PIL import Image
 from kabir_infra_app.db_conn import DbConn
 from utils import Environment, Models, Common
 
@@ -540,14 +539,18 @@ def management_dashboard(request):
          'status_code': status.HTTP_200_OK}, status=status.HTTP_200_OK)
 
 
-# @api_view(['POST'])
-# def testing(request):
-#     file_serializer = request.data.get('file_serializer')
-#     decoded_image_file = decode_binary_file(file_serializer)
-#     path = r'C:\Users\HP\Downloads\download.png'
-#     directory = r'E:\kabir_infra_app\kabir_infra\media'
-#     img = cv2.imread(path)
-#     os.chdir(directory)
-#     filename = 'grn_images.png'
-#     cv2.imwrite(filename, img)
-#     return Response(status=status.HTTP_201_CREATED)
+@api_view(['POST'])
+def testing(request):
+    image_file = request.data.get('image_file')
+    decoded_file = decode_binary_file(image_file)
+    decoded_data = base64.b64decode(decoded_file)
+    image_name = image_file.name
+    FileName = os.path.dirname(os.path.realpath(__file__)) + '\\static\\grn_images'
+    completeName = os.path.join(FileName, image_name)
+    out_file = open(completeName, 'wb')
+    out_file.write(decoded_data)
+    out_file.close()
+    img = open(completeName, 'rb')
+    response = FileResponse(img)
+    print(response)
+    return response
