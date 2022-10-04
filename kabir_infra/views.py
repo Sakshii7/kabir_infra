@@ -18,8 +18,7 @@ common = xmlrpc.client.ServerProxy('{}/xmlrpc/2/common'.format(url))
 
 
 def decode_binary_file(file):
-    file_name = file
-    binary_file = xmlrpc.client.Binary(file_name.read())
+    binary_file = xmlrpc.client.Binary(file.read())
     bytes_file = binary_file.data
     file_base64 = base64.b64encode(bytes_file)
     decoded_file = file_base64.decode('ascii')
@@ -545,12 +544,20 @@ def testing(request):
     decoded_file = decode_binary_file(image_file)
     decoded_data = base64.b64decode(decoded_file)
     image_name = image_file.name
+    print(image_file.__dict__)
+    FileName = os.path.dirname(os.path.realpath(__file__))+'\\static\\grn_images'
+    print(FileName)
+    completeName = os.path.join(FileName, image_name)
+    with open(completeName, 'wb') as out_file:
+        out_file.write(decoded_data)
+    file_type = image_file.content_type[:5]
+    file_url = f"http://127.0.0.1:8000/api/{file_type}/{image_name}"
+    return Response(file_url)
+
+
+@api_view(['GET'])
+def file_view(request, file_type, image_name):
     FileName = os.path.dirname(os.path.realpath(__file__)) + '\\static\\grn_images'
     completeName = os.path.join(FileName, image_name)
-    out_file = open(completeName, 'wb')
-    out_file.write(decoded_data)
-    out_file.close()
-    img = open(completeName, 'rb')
-    response = FileResponse(img)
-    print(response)
-    return response
+    file_response = FileResponse(open(completeName, 'rb'))
+    return file_response

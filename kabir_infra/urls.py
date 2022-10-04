@@ -28,4 +28,5 @@ urlpatterns = [
     path('get_company_list', views.get_company_list, name='Get Company List'),
     path('management_dashboard', views.management_dashboard, name='Management Dashboard'),
     path('testing', views.testing, name='Testing'),
+    path('<file_type>/<image_name>', views.file_view, name='File View')
 ]
