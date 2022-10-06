@@ -9,12 +9,18 @@ from django_jwt_extended import create_access_token, create_refresh_token, jwt_r
 from rest_framework import status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
+
 from kabir_infra_app.db_conn import DbConn
 from utils import Environment, Models, Common
 
 url = Environment.get("HOST_URL")
 db = Environment.get("DATABASE_NAME")
 common = xmlrpc.client.ServerProxy('{}/xmlrpc/2/common'.format(url))
+
+# Constants
+directory = os.path.dirname(os.path.realpath(__file__))
+image_base_path = f"{directory}/static/grn_images/"
+video_base_path = f"{directory}/static/grn_videos/"
 
 
 def decode_binary_file(file):
@@ -23,6 +29,26 @@ def decode_binary_file(file):
     file_base64 = base64.b64encode(bytes_file)
     decoded_file = file_base64.decode('ascii')
     return decoded_file
+
+
+def saving_file_in_folder(file_name, grn_name, file_type):
+    decoded_file = decode_binary_file(file_name)
+    decoded_data = base64.b64decode(decoded_file)
+    extension = file_name.name.split('.')[1]
+    today_date = datetime.today().date()
+    filename_new = f"{grn_name}-{today_date}-{file_type}.{extension}"
+    if file_type == 'image':
+        complete_file_name = os.path.join(image_base_path, filename_new)
+        with open(complete_file_name, 'wb') as out_file:
+            out_file.write(decoded_data)
+    elif file_type == 'video':
+        complete_file_name = os.path.join(video_base_path, filename_new)
+        with open(complete_file_name, 'wb') as out_file:
+            out_file.write(decoded_data)
+    else:
+        return Response('Invalid file')
+    file_url = f"http://127.0.0.1:8000/api/open/grn/{file_type}/{filename_new}"
+    return file_url
 
 
 # Login Api
@@ -104,23 +130,22 @@ def match_otp(request):
     otp_match = DbConn().get(Models.partner, 'search_read', [[['otp', '=', int(otp)]]],
                              {'fields': ['otp_time', 'otp_flag']})
     if otp_match:
-        otp_time = otp_match[0]['otp_time']
         otp_flag = otp_match[0]['otp_flag']
-        converted_time = Common.convert_utc_to_local_time(otp_time)
+        converted_time = Common.convert_utc_to_local_time(otp_match[0]['otp_time'])
         local_time = datetime.strptime(converted_time, "%Y-%m-%d %H:%M:%S")
         current_time = datetime.now()
         expire_time = local_time + timedelta(minutes=15)
         if otp_match and current_time > expire_time:
-            return Response({'result': 'otp time expires', 'status_code': status.HTTP_400_BAD_REQUEST},
+            return Response({'result': 'OTP time expires', 'status_code': status.HTTP_400_BAD_REQUEST},
                             status=status.HTTP_400_BAD_REQUEST)
         elif otp_match and current_time < expire_time and otp_flag is True:
-            return Response({'result': 'otp is already used', 'status_code': status.HTTP_400_BAD_REQUEST},
+            return Response({'result': 'OTP is already used', 'status_code': status.HTTP_400_BAD_REQUEST},
                             status=status.HTTP_400_BAD_REQUEST)
         else:
             DbConn().get(Models.partner, 'write', [[partner_id], {'otp_flag': True}])
-            return Response({'result': 'otp matched', 'status_code': status.HTTP_200_OK}, status=status.HTTP_200_OK)
+            return Response({'result': 'OTP matched', 'status_code': status.HTTP_200_OK}, status=status.HTTP_200_OK)
     else:
-        return Response({'result': 'otp does not exist',
+        return Response({'result': 'OTP does not exist',
                          'status_code': status.HTTP_400_BAD_REQUEST}, status=status.HTTP_400_BAD_REQUEST)
 
 
@@ -207,7 +232,17 @@ def get_active_site_list(request):
         if shape_path:
             shape = eval(shape_path.replace('\\', ''))
             site["shape_paths"] = shape
+        else:
+            site["shape_paths"] = ""
     return Response({'result': sites, 'status_code': status.HTTP_200_OK}, status=status.HTTP_200_OK)
+
+
+# Api for getting the Company List.
+@api_view(['GET'])
+@jwt_required()
+def get_company_list(request):
+    companies = DbConn().get(Models.company, 'search_read', [[]], {'fields': ['id', 'name']})
+    return Response({'result': companies, 'status_code': status.HTTP_200_OK}, status=status.HTTP_200_OK)
 
 
 # Api for getting the GRN List.
@@ -240,27 +275,6 @@ def get_grn_list(request):
         grn["grn_id"] = grn.pop("id")
         grn["grn_date"] = Common.change_date_format(grn["grn_date"])
     return Response({'result': grn_list, 'status_code': status.HTTP_200_OK}, status=status.HTTP_200_OK)
-
-
-# Api for Viewing the Particular GRN.
-@api_view(['GET'])
-@jwt_required()
-def view_grn(request):
-    grn_id = request.query_params.get("grn_id")
-    grn_details = DbConn().get(Models.grn, 'read', [[int(grn_id)]],
-                               {'fields': ['name', 'company_id', 'vendor_id', 'site_id', 'purchase_order_id',
-                                           'grn_date', 'vehicle_no', 'status']})
-    grn_lines = DbConn().get(Models.grn_line, 'search_read', [[["grn_id", "=", int(grn_id)]]],
-                             {'fields': ['material_id', 'qty_received', 'uom_id']})
-    for line in grn_lines:
-        line["grn_line_id"] = line.pop("id")
-    for grn in grn_details:
-        grn["grn_id"] = grn.pop("id")
-        grn['grn_lines'] = grn_lines
-        grn['status'] = str(grn["status"]).capitalize()
-        grn["grn_date"] = Common.change_date_format(grn["grn_date"])
-    return Response(
-        {'result': grn_details, 'status_code': status.HTTP_200_OK}, status=status.HTTP_200_OK)
 
 
 # Api for getting purchase order list according to Site and Vendor id.
@@ -301,46 +315,73 @@ def add_grn(request):
     document_date = request.data.get('document_date')
     grn_image = request.data.get('grn_image')
     grn_video = request.data.get('grn_video')
-    decoded_image_file = decode_binary_file(grn_image)
-    decoded_video_file = decode_binary_file(grn_video)
-    video_file_name = grn_video.name
-    content = grn_video.content_type
 
-    grn_id = DbConn().get(Models.grn, 'create', [
-        {'site_id': int(site_id), 'vendor_id': int(vendor_id), 'purchase_order_id': int(purchase_order_id),
-         'vehicle_no': vehicle_no, 'document_no': document_no, 'document_date': document_date,
-         'grn_image': decoded_image_file,
-         'grn_video': decoded_video_file, 'video_file_name': video_file_name}])
-
-    attachment_id = DbConn().get('ir.attachment', 'search', [
-        [['res_model', '=', 'syn.grn'], ['res_field', '=', 'grn_video'], ['res_id', '=', grn_id]]])
-
-    DbConn().get(Models.attachments, 'write', [[attachment_id[0]], {
-        'mimetype': content,
-        'index_content': 'video',
+    grn_id = DbConn().get(Models.grn, 'create', [{
+        'site_id': int(site_id),
+        'vendor_id': int(vendor_id),
+        'purchase_order_id': int(purchase_order_id),
+        'vehicle_no': vehicle_no,
+        'document_no': document_no, 'document_date': document_date
     }])
+
     po_line_details = DbConn().get(Models.purchase_order_line, 'read', [[int(po_line_id)]],
                                    {'fields': ['rate_per_uom', 'uom_id']})
     rate_per_uom = po_line_details[0]['rate_per_uom']
     uom_id = po_line_details[0]['uom_id'][0]
-    grn_line_id = DbConn().get(Models.grn_line, 'create', [
-        {'grn_id': grn_id, 'material_id': po_line_id, 'rate_per_uom': rate_per_uom, 'uom_id': uom_id,
-         'qty_received': qty_received}])
+    DbConn().get(Models.grn_line, 'create', [{
+        'grn_id': grn_id,
+        'material_id': po_line_id,
+        'rate_per_uom': rate_per_uom,
+        'uom_id': uom_id,
+        'qty_received': qty_received}])
 
-    grn_details = DbConn().get(Models.grn, 'search_read', [[]],
-                               {'fields': ['site_id', 'vendor_id', 'purchase_order_id', 'vehicle_no']})
+    grn_details = DbConn().get(Models.grn, 'read', [[int(grn_id)]], {'fields': ['name']})
+    grn_name = grn_details[0]['name'].replace('/', '')
 
-    grn_lines = DbConn().get(Models.grn_line, 'read', [[grn_line_id]],
-                             {'fields': ['material_id', 'rate_per_uom', 'uom_id', 'qty_received']})
+    image_url = saving_file_in_folder(grn_image, grn_name, 'image')
+    video_url = saving_file_in_folder(grn_video, grn_name, 'video')
+    DbConn().get(Models.grn, 'write', [[int(grn_id)], {'image_url': image_url, 'short_clip_url': video_url}])
+    return Response(
+        {'result': 'GRN added successfully.', 'grn_id': grn_details[0]['id'], 'status_code': status.HTTP_200_OK},
+        status=status.HTTP_200_OK)
 
+
+# Viewing the File Url.
+@api_view(['GET'])
+def file_view(request, file_type, image_name):
+    if file_type == 'image':
+        completeName = os.path.join(image_base_path, image_name)
+        file_response = FileResponse(open(completeName, 'rb'))
+        return file_response
+    elif file_type == 'video':
+        completeName = os.path.join(video_base_path, image_name)
+        file_response = FileResponse(open(completeName, 'rb'))
+        return file_response
+    else:
+        return Response('Invalid file')
+
+
+# Api for Viewing the Particular GRN.
+@api_view(['GET'])
+@jwt_required()
+def view_grn(request):
+    grn_id = request.query_params.get("grn_id")
+    grn_details = DbConn().get(Models.grn, 'read', [[int(grn_id)]],
+                               {'fields': ['name', 'company_id', 'vendor_id', 'site_id', 'purchase_order_id',
+                                           'grn_date', 'vehicle_no', 'status', 'image_url', 'short_clip_url']})
+    grn_lines = DbConn().get(Models.grn_line, 'search_read', [[["grn_id", "=", int(grn_id)]]],
+                             {'fields': ['material_id', 'qty_received', 'uom_id']})
+    for line in grn_lines:
+        line["grn_line_id"] = line.pop("id")
     for grn in grn_details:
         grn["grn_id"] = grn.pop("id")
+        grn["image_url"] = grn["image_url"] if grn["image_url"] else ""
+        grn["short_clip_url"] = grn["short_clip_url"] if grn["short_clip_url"] else ""
         grn['grn_lines'] = grn_lines
-
-    for line in grn_lines:
-        line['grn_line_id'] = line.pop("id")
-
-    return Response({'result': grn_details, 'status_code': status.HTTP_200_OK}, status=status.HTTP_200_OK)
+        grn['status'] = str(grn["status"]).capitalize()
+        grn["grn_date"] = Common.change_date_format(grn["grn_date"])
+    return Response(
+        {'result': grn_details, 'status_code': status.HTTP_200_OK}, status=status.HTTP_200_OK)
 
 
 # Api for getting the Pending Purchase Order List.
@@ -434,6 +475,25 @@ def get_material_requisition_list(request):
     return Response({'result': material_requisition_list, 'status_code': status.HTTP_200_OK}, status=status.HTTP_200_OK)
 
 
+# Api for Adding the Material Requisition.
+@api_view(['POST'])
+@jwt_required()
+def add_material_requisition(request):
+    site_id = request.data.get('site_id')
+    identity = get_jwt_identity(request)
+    user_id = identity["user_details"][0]["user_id"]
+    materials = request.data.get('materials')
+    material_data = eval(materials.replace('\\', ''))
+    material_requisition_id = DbConn().get(Models.material_requisition, 'create',
+                                           [{'site_id': int(site_id), 'user_id': user_id}])
+    for mat in material_data:
+        mat['material_requisition_id'] = material_requisition_id
+        DbConn().get(Models.material_requisition_line, 'create', [mat])
+
+    return Response({'result': 'Material requisition added successfully', 'status_code': status.HTTP_200_OK},
+                    status=status.HTTP_200_OK)
+
+
 # Api for the View of the Particular Material Requisition.
 @api_view(['GET'])
 @jwt_required()
@@ -450,12 +510,11 @@ def view_material_requisition(request):
 
     for line in material_requisition_lines:
         line['line_id'] = line.pop("id")
-        material_id = line["material_id"][0]
         po_list = []
         for po in purchase_order_list:
             purchase_order_lines = DbConn().get(Models.purchase_order_line, 'search_read',
                                                 [[["purchase_order_id", "=", po.get('id')],
-                                                  ['material_id', '=', material_id]]],
+                                                  ['material_id', '=', line["material_id"][0]]]],
                                                 {'fields': ['material_id', 'purchase_order_id']})
             if purchase_order_lines:
                 po_list.append(po)
@@ -470,40 +529,6 @@ def view_material_requisition(request):
 
     return Response({'result': material_requisition_details, 'status_code': status.HTTP_200_OK},
                     status=status.HTTP_200_OK)
-
-
-# Api for Adding the Material Requisition.
-@api_view(['POST'])
-@jwt_required()
-def add_material_requisition(request):
-    site_id = request.data.get('site_id')
-    identity = get_jwt_identity(request)
-    user_id = identity["user_details"][0]["user_id"]
-    materials = request.data.get('materials')
-    material_data = eval(materials.replace('\\', ''))
-    material_requisition_id = DbConn().get(Models.material_requisition, 'create',
-                                           [{'site_id': int(site_id), 'user_id': user_id}])
-    for mat in material_data:
-        mat['material_requisition_id'] = material_requisition_id
-        DbConn().get(Models.material_requisition_line, 'create', [mat])
-    material_requisition_details = DbConn().get(Models.material_requisition, 'read', [[material_requisition_id]],
-                                                {'fields': ['name', 'site_id', 'requisition_date']})
-
-    for material_requisition in material_requisition_details:
-        material_requisition["material_requisition_id"] = material_requisition.pop("id")
-        material_requisition['material_requisition_lines'] = material_data
-        material_requisition["requisition_date"] = Common.change_date_format(
-            material_requisition["requisition_date"])
-    return Response({'result': material_requisition_details, 'status_code': status.HTTP_200_OK},
-                    status=status.HTTP_200_OK)
-
-
-# Api for getting the Company List.
-@api_view(['GET'])
-@jwt_required()
-def get_company_list(request):
-    companies = DbConn().get(Models.company, 'search_read', [[]], {'fields': ['id', 'name']})
-    return Response({'result': companies, 'status_code': status.HTTP_200_OK}, status=status.HTTP_200_OK)
 
 
 # Management Dashboard Api for getting the No. of Active Site List and Total Outstanding of the GRN List.
@@ -521,6 +546,8 @@ def management_dashboard(request):
         if shape_path:
             shape = eval(shape_path.replace('\\', ''))
             site["shape_paths"] = shape
+        else:
+            site["shape_paths"] = ""
         due_amount = 0.0
         grn_list = DbConn().get(Models.grn, 'search_read',
                                 [[['site_id', '=', site.get('id')], ['status', '=', 'approved']]],
@@ -536,28 +563,3 @@ def management_dashboard(request):
     return Response(
         {'result': {'no_of_active_sites': no_of_sites, 'total_outstanding': total_outstanding, 'sites': active_sites},
          'status_code': status.HTTP_200_OK}, status=status.HTTP_200_OK)
-
-
-@api_view(['POST'])
-def testing(request):
-    image_file = request.data.get('image_file')
-    decoded_file = decode_binary_file(image_file)
-    decoded_data = base64.b64decode(decoded_file)
-    image_name = image_file.name
-    print(image_file.__dict__)
-    FileName = os.path.dirname(os.path.realpath(__file__))+'\\static\\grn_images'
-    print(FileName)
-    completeName = os.path.join(FileName, image_name)
-    with open(completeName, 'wb') as out_file:
-        out_file.write(decoded_data)
-    file_type = image_file.content_type[:5]
-    file_url = f"http://127.0.0.1:8000/api/{file_type}/{image_name}"
-    return Response(file_url)
-
-
-@api_view(['GET'])
-def file_view(request, file_type, image_name):
-    FileName = os.path.dirname(os.path.realpath(__file__)) + '\\static\\grn_images'
-    completeName = os.path.join(FileName, image_name)
-    file_response = FileResponse(open(completeName, 'rb'))
-    return file_response
