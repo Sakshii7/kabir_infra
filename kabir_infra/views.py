@@ -348,14 +348,14 @@ def add_grn(request):
 
 # Viewing the File Url.
 @api_view(['GET'])
-def file_view(request, file_type, image_name):
+def file_view(request, file_type, file_name):
     if file_type == 'image':
-        completeName = os.path.join(image_base_path, image_name)
-        file_response = FileResponse(open(completeName, 'rb'))
+        complete_file_name = os.path.join(image_base_path, file_name)
+        file_response = FileResponse(open(complete_file_name, 'rb'))
         return file_response
     elif file_type == 'video':
-        completeName = os.path.join(video_base_path, image_name)
-        file_response = FileResponse(open(completeName, 'rb'))
+        complete_file_name = os.path.join(video_base_path, file_name)
+        file_response = FileResponse(open(complete_file_name, 'rb'))
         return file_response
     else:
         return Response('Invalid file')

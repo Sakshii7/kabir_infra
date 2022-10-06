@@ -19,7 +19,7 @@ urlpatterns = [
     path('get_grn_list', views.get_grn_list, name='Get GRN list'),
     path('ref_purchase_order_list', views.ref_purchase_order_list, name='Ref Purchase order List'),
     path('add_grn', views.add_grn, name='Add GRN'),
-    path('open/grn/<file_type>/<image_name>', views.file_view, name='File View'),
+    path('open/grn/<file_type>/<file_name>', views.file_view, name='File View'),
     path('view_grn', views.view_grn, name='GRN View'),
     path('get_pending_purchase_order_list', views.get_pending_purchase_order_list,
          name='Get Pending Purchase Order list'),
